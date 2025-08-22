@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Posts - Nostr Home</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>Nostr Home</h1>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Home</a>
+                <a href="/posts" class="nav-link active">Posts</a>
+                <a href="/quips" class="nav-link">Quips</a>
+                <a href="/gallery" class="nav-link">Gallery</a>
+                <a href="/relay" class="nav-link">Relay</a>
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <section class="content-header">
+            <div class="container">
+                <h1>Long-Form Posts</h1>
+                <p>Thoughtful, detailed content from your Nostr feed</p>
+            </div>
+        </section>
+
+        <section class="content-list">
+            <div class="container">
+                <div class="content-grid" id="posts-container">
+                    <div class="loading">Loading posts...</div>
+                </div>
+                
+                <div class="pagination" id="pagination" style="display: none;">
+                    <button id="prev-page" onclick="postsPage.previousPage()">Previous</button>
+                    <span id="page-info"></span>
+                    <button id="next-page" onclick="postsPage.nextPage()">Next</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Nostr Home. Powered by Nostr protocol.</p>
+        </div>
+    </footer>
+
+    <script src="site-config.js"></script>
+    <script src="posts.js"></script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nostr Relay - Nostr Home</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>Nostr Home</h1>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Home</a>
+                <a href="/posts" class="nav-link">Posts</a>
+                <a href="/quips" class="nav-link">Quips</a>
+                <a href="/gallery" class="nav-link">Gallery</a>
+                <a href="/relay" class="nav-link active">Relay</a>
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <section class="relay-hero">
+            <div class="hero-content">
+                <h1 class="hero-title">Enhanced Nostr Relay</h1>
+                <p class="hero-subtitle">A feature-rich Nostr relay supporting 23 NIPs with real-time statistics and advanced capabilities.</p>
+                <div class="relay-status">
+                    <div class="status-indicator" id="relay-status">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="relay-stats">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="total-events">-</div>
+                        <div class="stat-label">Total Events</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="unique-pubkeys">-</div>
+                        <div class="stat-label">Unique Authors</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔗</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="websocket-connections">-</div>
+                        <div class="stat-label">Active Connections</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⚡</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="events-24h">-</div>
+                        <div class="stat-label">Events (24h)</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="relay-info">
+            <div class="info-grid">
+                <div class="info-card">
+                    <h2>About This Relay</h2>
+                    <p id="relay-description">This is an enhanced Nostr relay built with advanced features and comprehensive NIP support. It provides a reliable, secure, and feature-rich environment for the Nostr ecosystem.</p>
+                    
+                    <div class="relay-features">
+                        <h3>Key Features</h3>
+                        <ul>
+                            <li>✅ WebSocket and HTTP API support</li>
+                            <li>✅ Advanced filtering and search capabilities</li>
+                            <li>✅ Rate limiting and DDoS protection</li>
+                            <li>✅ Event deletion and replacement</li>
+                            <li>✅ Authentication and authorization</li>
+                            <li>✅ Real-time statistics and monitoring</li>
+                            <li id="owner-only-feature" style="display: none;">🔒 Owner-only mode (restricted access)</li>
+                        </ul>
+                    </div>
+
+                    <div class="connection-info">
+                        <h3>Connection Information</h3>
+                        <div class="connection-details">
+                            <div class="connection-item">
+                                <strong>WebSocket URL:</strong>
+                                <code id="websocket-url">ws://localhost:3000/ws</code>
+                                <button class="copy-btn" onclick="copyToClipboard('websocket-url')">📋</button>
+                            </div>
+                            <div class="connection-item">
+                                <strong>HTTP API:</strong>
+                                <code id="http-url">http://localhost:3000/api</code>
+                                <button class="copy-btn" onclick="copyToClipboard('http-url')">📋</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h2>Supported NIPs</h2>
+                    <p>This relay implements 23 Nostr Improvement Proposals (NIPs) for maximum compatibility:</p>
+                    
+                    <div class="nips-grid" id="nips-list">
+                        <!-- NIPs will be loaded dynamically -->
+                    </div>
+
+                    <div class="nip-legend">
+                        <h3>NIP Categories</h3>
+                        <div class="legend-items">
+                            <div class="legend-item">
+                                <span class="nip-badge basic">Basic</span>
+                                <span>Core protocol features</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="nip-badge auth">Auth</span>
+                                <span>Authentication & security</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="nip-badge advanced">Advanced</span>
+                                <span>Extended functionality</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="nip-badge social">Social</span>
+                                <span>Social media features</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="relay-activity">
+            <div class="activity-container">
+                <h2>Recent Activity</h2>
+                <div class="activity-feed" id="activity-feed">
+                    <div class="activity-item loading">
+                        <div class="activity-content">Loading recent activity...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="site-config.js"></script>
+    <script src="relay.js"></script>
+    <script>
+        // Theme toggle functionality (shared across all pages)
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.querySelector('.theme-icon');
+        
+        // Check for saved theme preference or default to 'light'
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        themeIcon.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', () => {
+            const theme = document.documentElement.getAttribute('data-theme');
+            const newTheme = theme === 'dark' ? 'light' : 'dark';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeIcon.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+
+        // Copy to clipboard functionality
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                // Show feedback
+                const btn = element.nextElementSibling;
+                const originalText = btn.textContent;
+                btn.textContent = '✅';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 1000);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nostr Home - Your Decentralized Content</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>Nostr Home</h1>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link active">Home</a>
+                <a href="/posts" class="nav-link">Posts</a>
+                <a href="/quips" class="nav-link">Quips</a>
+                <a href="/gallery" class="nav-link">Gallery</a>
+                <a href="/relay" class="nav-link">Relay</a>
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <section class="hero">
+            <div class="hero-content">
+                <h1 class="hero-title">Your Nostr Content, Beautifully Displayed</h1>
+                <p class="hero-subtitle">A decentralized blog powered by Nostr, with automatic caching and a clean, modern interface.</p>
+                <div class="hero-stats">
+                    <div class="stat-item">
+                        <span class="stat-number" id="posts-count">-</span>
+                        <span class="stat-label">Long Posts</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="quips-count">-</span>
+                        <span class="stat-label">Quips</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="images-count">-</span>
+                        <span class="stat-label">Images</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="content-preview">
+            <div class="container">
+                <div class="preview-grid">
+                    <div class="preview-card">
+                        <h3>Latest Posts</h3>
+                        <div class="preview-content" id="latest-posts">
+                            <div class="loading">Loading...</div>
+                        </div>
+                        <a href="/posts" class="preview-link">View All Posts →</a>
+                    </div>
+                    
+                    <div class="preview-card">
+                        <h3>Recent Quips</h3>
+                        <div class="preview-content" id="latest-quips">
+                            <div class="loading">Loading...</div>
+                        </div>
+                        <a href="/quips" class="preview-link">View All Quips →</a>
+                    </div>
+                    
+                    <div class="preview-card">
+                        <h3>Image Gallery</h3>
+                        <div class="preview-content" id="latest-images">
+                            <div class="loading">Loading...</div>
+                        </div>
+                        <a href="/gallery" class="preview-link">View Gallery →</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Nostr Home. Powered by Nostr protocol.</p>
+        </div>
+    </footer>
+
+    <script src="site-config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

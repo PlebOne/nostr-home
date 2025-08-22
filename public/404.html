@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Not Found - Nostr Home</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>Nostr Home</h1>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Home</a>
+                <a href="/posts" class="nav-link">Posts</a>
+                <a href="/quips" class="nav-link">Quips</a>
+                <a href="/gallery" class="nav-link">Gallery</a>
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <section class="content-header">
+            <div class="container">
+                <h1>404 - Page Not Found</h1>
+                <p>The page you're looking for doesn't exist.</p>
+            </div>
+        </section>
+
+        <section class="content-list">
+            <div class="container">
+                <div style="text-align: center; padding: 4rem 0;">
+                    <h2 style="font-size: 6rem; color: #6b7280; margin-bottom: 1rem;">404</h2>
+                    <p style="font-size: 1.2rem; color: #6b7280; margin-bottom: 2rem;">
+                        Oops! The page you're looking for seems to have wandered off into the decentralized void.
+                    </p>
+                    <a href="/" style="
+                        display: inline-block;
+                        padding: 0.75rem 1.5rem;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        text-decoration: none;
+                        border-radius: 6px;
+                        font-weight: 500;
+                        transition: transform 0.2s ease;
+                    " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                        Go Home
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Nostr Home. Powered by Nostr protocol.</p>
+        </div>
+    </footer>
+
+    <script src="site-config.js"></script>
+    <script>
+        // Theme management for 404 page
+        class ThemeManager {
+            constructor() {
+                this.init();
+            }
+
+            init() {
+                // Check for saved theme or default to light
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                this.setTheme(savedTheme);
+                
+                // Set up theme toggle button
+                const themeToggle = document.getElementById('theme-toggle');
+                if (themeToggle) {
+                    themeToggle.addEventListener('click', () => this.toggleTheme());
+                }
+            }
+
+            setTheme(theme) {
+                if (theme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    this.updateToggleIcon('☀️');
+                } else {
+                    document.documentElement.removeAttribute('data-theme');
+                    this.updateToggleIcon('🌙');
+                }
+                localStorage.setItem('theme', theme);
+            }
+
+            toggleTheme() {
+                const currentTheme = localStorage.getItem('theme') || 'light';
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                this.setTheme(newTheme);
+            }
+
+            updateToggleIcon(icon) {
+                const themeIcon = document.querySelector('.theme-icon');
+                if (themeIcon) {
+                    themeIcon.textContent = icon;
+                }
+            }
+        }
+
+        // Initialize theme manager
+        document.addEventListener('DOMContentLoaded', () => {
+            new ThemeManager();
+        });
+    </script>
+</body>
+</html>
