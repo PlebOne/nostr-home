@@ -20,5 +20,5 @@ RUN mkdir -p /app/data
 # Expose port
 EXPOSE 3000
 
-# Run the application
-CMD ["python", "app.py"]
+# Run the application with production server
+CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:3000", "app:app"]

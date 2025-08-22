@@ -38,10 +38,17 @@ Nostr Home is a Flask-based web application that serves as both a content aggreg
 - **Real-time Updates**: Live content updates from connected relays
 
 ### Relay Features
-- **23 NIP Support**: Comprehensive Nostr Implementation Possibilities
+- **Complete NIP Implementation**: 23 NIPs fully implemented and tested
+  - **Core Protocol**: NIP-01, 11, 15, 20 (WebSocket, Info, EOSE, Commands)
+  - **Advanced Queries**: NIP-12, 45, 50 (Tag Filtering, COUNT, Search)
+  - **Event Management**: NIP-09, 16, 33 (Deletion, Replaceable, Parameterized)
+  - **Security**: NIP-22, 42, 13 (Time Limits, Auth, Proof of Work)
+  - **Content Types**: NIP-02, 04, 25, 28 (Contacts, DMs, Reactions, Chat)
+  - **Advanced**: NIP-26, 40, 65, 05 (Delegation, Expiration, Relay Lists, DNS)
+- **High Performance**: Go-based implementation with optimized database queries
 - **Owner-only Mode**: Configurable restriction to specific pubkey
-- **WebSocket Support**: Full bidirectional communication
-- **Event Validation**: Complete event verification and filtering
+- **Real-time Broadcasting**: Efficient event distribution to all subscribers
+- **Comprehensive Validation**: Event verification, signature checking, and filtering
 - **Statistics Dashboard**: Real-time relay metrics and monitoring
 
 ### Technical Features

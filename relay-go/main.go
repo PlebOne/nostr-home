@@ -106,7 +106,7 @@ type RelayInfo struct {
 // NewRelay creates a new relay instance
 func NewRelay() *Relay {
 	// Initialize database
-	db, err := sql.Open("sqlite3", "../data/nostr_content.db")
+	db, err := sql.Open("sqlite3", "./data/nostr_content.db")
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}

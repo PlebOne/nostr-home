@@ -9,6 +9,7 @@ from nostr_relay_enhanced import EnhancedNostrRelay
 import threading
 import schedule
 import time
+import requests
 from datetime import datetime
 
 # Global start time for uptime calculation
@@ -163,65 +164,75 @@ def update_cache():
             'message': str(e)
         }), 500
 
-# Relay API routes
+# Relay API routes - Proxy to Go relay
 @app.route('/api/relay/info')
 def relay_info():
-    """Get relay information (NIP-11)"""
-    if not relay:
-        return jsonify({'error': 'Relay not enabled'}), 404
-    
-    return jsonify(relay.get_relay_info())
+    """Get relay information (NIP-11) - proxied from Go relay"""
+    try:
+        response = requests.get('http://relay-go:8080/', timeout=5)
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            return jsonify({'error': 'Go relay not responding'}), 502
+    except Exception as e:
+        print(f"Error connecting to Go relay: {e}")
+        return jsonify({'error': 'Go relay not available'}), 502
 
 @app.route('/api/relay/stats')
 def relay_stats():
-    """Get relay statistics"""
-    if not relay:
-        return jsonify({'error': 'Relay not enabled'}), 404
-    
+    """Get relay statistics - proxied from Go relay"""
     try:
-        # Get database statistics
-        counts = db.get_counts()
-        
-        # Try to get relay-specific stats, fall back to general stats
-        try:
-            relay_stats_data = db.get_relay_stats()
-            total_events = relay_stats_data.get('total_events', 0)
-            unique_authors = relay_stats_data.get('unique_authors', 0)
-        except:
-            # Fall back to main database counts
-            total_events = counts['posts'] + counts['quips'] + counts['images']
-            unique_authors = 1  # Simplified for now
-        
-        # Calculate events in last 24 hours (simplified)
-        events_24h = min(total_events, 50)  # Placeholder calculation
-        
-        return jsonify({
-            'total_events': total_events,
-            'unique_pubkeys': unique_authors,
-            'websocket_connections': 0,  # Placeholder - would need to track active connections
-            'events_24h': events_24h,
-            'uptime': time.time() - APP_START_TIME
-        })
+        response = requests.get('http://relay-go:8080/api/stats', timeout=5)
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            # Fallback to basic stats if Go relay doesn't respond
+            counts = db.get_counts()
+            return jsonify({
+                'total_events': counts['posts'] + counts['quips'] + counts['images'],
+                'unique_pubkeys': 1,
+                'websocket_connections': 0,
+                'events_24h': 0,
+                'uptime': time.time() - APP_START_TIME
+            })
     except Exception as e:
-        print(f"Error getting relay stats: {e}")
+        print(f"Error connecting to Go relay for stats: {e}")
+        # Fallback to basic stats
+        counts = db.get_counts()
         return jsonify({
-            'total_events': 0,
-            'unique_pubkeys': 0,
+            'total_events': counts['posts'] + counts['quips'] + counts['images'],
+            'unique_pubkeys': 1,
             'websocket_connections': 0,
             'events_24h': 0,
-            'uptime': 0
+            'uptime': time.time() - APP_START_TIME
         })
 
 @app.route('/api/relay/nips')
 def relay_nips():
-    """Get supported NIPs"""
-    if not relay:
-        return jsonify({'error': 'Relay not enabled'}), 404
-    
-    return jsonify({
-        'nips': relay.get_supported_nips(),
-        'count': len(relay.get_supported_nips())
-    })
+    """Get supported NIPs - from Go relay info"""
+    try:
+        response = requests.get('http://relay-go:8080/', timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return jsonify({
+                'nips': data.get('supported_nips', []),
+                'count': len(data.get('supported_nips', []))
+            })
+        else:
+            # Fallback to known NIPs
+            fallback_nips = [1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 15, 16, 20, 22, 25, 26, 28, 33, 40, 42, 45, 50, 65]
+            return jsonify({
+                'nips': fallback_nips,
+                'count': len(fallback_nips)
+            })
+    except Exception as e:
+        print(f"Error connecting to Go relay for NIPs: {e}")
+        # Fallback to known NIPs
+        fallback_nips = [1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 15, 16, 20, 22, 25, 26, 28, 33, 40, 42, 45, 50, 65]
+        return jsonify({
+            'nips': fallback_nips,
+            'count': len(fallback_nips)
+        })
 
 @app.route('/api/relay/activity')
 def relay_activity():
@@ -346,3 +357,14 @@ if __name__ == '__main__':
     
     # Use SocketIO to run the app with WebSocket support
     socketio.run(app, host='0.0.0.0', port=config.PORT, debug=False)
+
+# For gunicorn compatibility
+def create_app():
+    print("🚀 Starting Nostr Home Hub (Production)...")
+    print(f"📊 Using npub: {config.NOSTR_NPUB}")
+    print(f"🌐 Connecting to {len(config.NOSTR_RELAYS)} relays")
+    
+    # Start the background scheduler
+    start_scheduler()
+    
+    return app

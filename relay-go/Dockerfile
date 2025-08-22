@@ -1,11 +1,15 @@
 # Multi-stage build for Go relay
-FROM golang:1.21-alpine AS builder
+FROM golang:1.21-bullseye AS builder
 
 # Set working directory
 WORKDIR /app
 
 # Install dependencies for CGO (SQLite)
-RUN apk add --no-cache gcc musl-dev sqlite-dev
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libc6-dev \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -20,15 +24,19 @@ COPY . .
 ENV CGO_ENABLED=1
 RUN go build -o relay-server main.go
 
-# Final stage
-FROM alpine:latest
+# Final stage - use Debian slim for compatibility
+FROM debian:bullseye-slim
 
 # Install SQLite and other runtime dependencies
-RUN apk --no-cache add ca-certificates sqlite
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    sqlite3 \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup -g 1001 relay && \
-    adduser -D -u 1001 -G relay relay
+RUN groupadd -g 1001 relay && \
+    useradd -r -u 1001 -g relay relay
 
 # Set working directory
 WORKDIR /app

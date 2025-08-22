@@ -22,7 +22,10 @@ class RelayDashboard {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         
-        document.getElementById('websocket-url').textContent = `${protocol}//${host}/ws`;
+        // Point to Go relay (port 8080) for WebSocket connections
+        const goRelayHost = host.includes(':') ? host.split(':')[0] + ':8080' : host + ':8080';
+        
+        document.getElementById('websocket-url').textContent = `${protocol}//${goRelayHost}/ws`;
         document.getElementById('http-url').textContent = `${window.location.protocol}//${host}/api`;
     }
 
