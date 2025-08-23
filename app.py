@@ -180,7 +180,7 @@ def relay_info():
 def relay_stats():
     """Get relay statistics - proxied from Go relay"""
     try:
-        response = requests.get('http://relay-go:7447/api/stats', timeout=5)
+        response = requests.get('http://relay-go:7447/stats', timeout=5)
         if response.status_code == 200:
             return jsonify(response.json())
         else:
