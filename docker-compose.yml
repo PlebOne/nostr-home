@@ -8,39 +8,32 @@ services:
     volumes:
       - ./data:/app/data
       - ./config:/app/config
+      - ./public:/app/public
     environment:
       - PORT=3000
       - NOSTR_NPUB=${NOSTR_NPUB}
       - SITE_NAME=${SITE_NAME:-Nostr Home}
       - SITE_SUBTITLE=${SITE_SUBTITLE:-Your Decentralized Content}
+      - RELAY_HOST=rnostr-relay
+      - RELAY_PORT=8080
     restart: unless-stopped
     depends_on:
-      - relay-go
+      - rnostr-relay
     networks:
       - nostr-network
 
-  relay-go:
-    build: ./relay-go
+  rnostr-relay:
+    image: ghcr.io/rnostr/rnostr:latest
     ports:
-      - "7447:7447"
-    environment:
-      - NOSTR_NPUB=${NOSTR_NPUB}
-      - RELAY_OWNER_ONLY=${RELAY_OWNER_ONLY:-true}
-      - RELAY_NAME=${SITE_NAME:-Nostr Home} Relay
-      - RELAY_DESCRIPTION=Enhanced personal Nostr relay with multi-NIP support
-      - RELAY_CONTACT=${RELAY_CONTACT:-admin@localhost}
-      - NOTIFY_URL=http://nostr-home:3000/api/update-cache
+      - "8080:8080"
     volumes:
-      - ./data:/app/data
+      - ./rnostr-data:/data
+      - ./rnostr.toml:/config/rnostr.toml:ro
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped
     networks:
       - nostr-network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:7447/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    restart: unless-stopped
 
   nginx:
     image: nginx:alpine
@@ -48,7 +41,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl
       - /etc/letsencrypt:/etc/letsencrypt
     depends_on:

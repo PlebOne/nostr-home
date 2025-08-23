@@ -569,3 +569,108 @@ style.textContent = `
     [data-theme="dark"] .nip-badge.social { background: #be185d; color: #fce7f3; }
 `;
 document.head.appendChild(style);
+
+// Manual fetch posts function
+async function fetchPostsManually() {
+    const btn = document.getElementById('fetchPostsBtn');
+    const btnText = btn.querySelector('.btn-text');
+    const btnIcon = btn.querySelector('.btn-icon');
+    
+    // Disable button and show loading state
+    btn.disabled = true;
+    btnText.textContent = 'Fetching...';
+    btnIcon.textContent = '🔄';
+    
+    try {
+        console.log('Manual fetch initiated...');
+        
+        // Call the update cache API
+        const response = await fetch('/api/update-cache', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('Fetch result:', result);
+        
+        // Show success feedback
+        btnText.textContent = 'Success!';
+        btnIcon.textContent = '✅';
+        
+        // If we have processed data, show it
+        if (result.processed) {
+            const total = (result.processed.posts || 0) + (result.processed.quips || 0) + (result.processed.images || 0);
+            if (total > 0) {
+                btnText.textContent = `Found ${total} new items!`;
+            } else {
+                btnText.textContent = 'No new posts found';
+                btnIcon.textContent = '📭';
+            }
+        }
+        
+        // Add to recent activity
+        addActivityItem('manual_fetch', 'Manual fetch completed', 'success');
+        
+        // Refresh the stats after successful fetch
+        setTimeout(fetchRelayStats, 1000);
+        
+    } catch (error) {
+        console.error('Error fetching posts:', error);
+        btnText.textContent = 'Failed to fetch';
+        btnIcon.textContent = '❌';
+        
+        // Add to recent activity
+        addActivityItem('manual_fetch', 'Manual fetch failed', 'error');
+    }
+    
+    // Reset button after 3 seconds
+    setTimeout(() => {
+        btn.disabled = false;
+        btnText.textContent = 'Fetch New Posts';
+        btnIcon.textContent = '🔄';
+    }, 3000);
+}
+
+// Helper function to add activity items
+function addActivityItem(type, message, status = 'info') {
+    const activityContent = document.querySelector('.activity-content');
+    if (!activityContent || activityContent.textContent.includes('Loading')) {
+        return;
+    }
+    
+    const activityList = activityContent.querySelector('.activity-list');
+    if (!activityList) return;
+    
+    const activityItem = document.createElement('div');
+    activityItem.className = 'activity-item';
+    
+    const badge = document.createElement('span');
+    badge.className = `activity-badge ${status === 'error' ? 'error' : status === 'success' ? 'connect' : 'info'}`;
+    badge.textContent = status === 'error' ? 'ERROR' : status === 'success' ? 'SUCCESS' : 'MANUAL';
+    
+    const time = document.createElement('span');
+    time.className = 'activity-time';
+    time.textContent = new Date().toLocaleTimeString();
+    
+    const text = document.createElement('span');
+    text.className = 'activity-text';
+    text.textContent = message;
+    
+    activityItem.appendChild(badge);
+    activityItem.appendChild(time);
+    activityItem.appendChild(text);
+    
+    // Add to top of list
+    activityList.insertBefore(activityItem, activityList.firstChild);
+    
+    // Keep only last 10 items
+    while (activityList.children.length > 10) {
+        activityList.removeChild(activityList.lastChild);
+    }
+}

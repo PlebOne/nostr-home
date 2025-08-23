@@ -1673,3 +1673,75 @@ a:hover {
 }
 
 
+
+/* Manual Fetch Button */
+.fetch-btn {
+    background: linear-gradient(135deg, #4a90ff, #6b73ff);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 16px;
+    box-shadow: 0 2px 8px rgba(74, 144, 255, 0.3);
+}
+
+.fetch-btn:hover {
+    background: linear-gradient(135deg, #3a80ef, #5b63ef);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 144, 255, 0.4);
+}
+
+.fetch-btn:active {
+    transform: translateY(0);
+}
+
+.fetch-btn:disabled {
+    background: linear-gradient(135deg, #888, #999);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-icon {
+    font-size: 16px;
+    animation: none;
+}
+
+.fetch-btn:disabled .btn-icon {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.stats-header-centered {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.stats-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Dark theme support */
+[data-theme="dark"] .fetch-btn {
+    background: linear-gradient(135deg, #5a70ff, #7b83ff);
+}
+
+[data-theme="dark"] .fetch-btn:hover {
+    background: linear-gradient(135deg, #4a60ef, #6b73ef);
+}
