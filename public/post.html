@@ -1,6 +1,8 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
+    <script>if(localStorage.getItem("theme")==="dark")document.documentElement.setAttribute("data-theme","dark");</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Post - Nostr Home</title>
@@ -47,11 +49,8 @@
         </div>
     </footer>
 
+
     <script src="site-config.js"></script>
     <script src="post.js"></script>
-    <script>
-        // Initialize the post page
-        const postPage = new PostPage();
-    </script>
 </body>
 </html>

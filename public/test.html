@@ -2,7 +2,25 @@
 
 <html lang="en">
 <head>
-    <script>if(localStorage.getItem("theme")==="dark")document.documentElement.setAttribute("data-theme","dark");</script>
+    </script>
+        /* Prevent flash by immediately checking and applying theme */
+        (function() {
+            var theme = window.localStorage && localStorage.getItem("theme");
+            // Set cookie for server-side use
+            if (theme) {
+                document.cookie = "theme=" + theme + ";path=/;max-age=31536000;SameSite=Lax";
+            }
+            if (theme === "dark") {
+                document.documentElement.setAttribute("data-theme", "dark");
+                
+                
+            } else {
+                document.documentElement.setAttribute("data-theme", "light");
+                
+            }
+        })();
+    </script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nostr Home - Your Decentralized Content</title>
@@ -88,7 +106,6 @@
             <p>&copy; 2024 Nostr Home. Powered by Nostr protocol.</p>
         </div>
     </footer>
-
 
     <script src="site-config.js"></script>
     <script src="app.js"></script>

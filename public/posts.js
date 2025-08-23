@@ -422,9 +422,11 @@ class ThemeManager {
 
     setTheme(theme) {
         if (theme === 'dark') {
+            document.documentElement.classList.add('theme-transition');
             document.documentElement.setAttribute('data-theme', 'dark');
             this.updateToggleIcon('☀️');
         } else {
+            document.documentElement.classList.add('theme-transition');
             document.documentElement.removeAttribute('data-theme');
             this.updateToggleIcon('🌙');
         }

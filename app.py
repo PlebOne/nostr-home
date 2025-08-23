@@ -1,4 +1,6 @@
 from flask import Flask, jsonify, request, send_from_directory
+import time
+from datetime import datetime
 from flask_cors import CORS
 from flask_socketio import SocketIO
 import os
@@ -6,11 +8,7 @@ import config
 from database import NostrDatabase
 from nostr_client import NostrContentClient
 from nostr_relay_enhanced import EnhancedNostrRelay
-import threading
-import schedule
-import time
 import requests
-from datetime import datetime
 
 # Global start time for uptime calculation
 APP_START_TIME = time.time()
@@ -169,7 +167,7 @@ def update_cache():
 def relay_info():
     """Get relay information (NIP-11) - proxied from Go relay"""
     try:
-        response = requests.get('http://relay-go:8080/', timeout=5)
+        response = requests.get('http://relay-go:7447/', timeout=5)
         if response.status_code == 200:
             return jsonify(response.json())
         else:
@@ -182,7 +180,7 @@ def relay_info():
 def relay_stats():
     """Get relay statistics - proxied from Go relay"""
     try:
-        response = requests.get('http://relay-go:8080/api/stats', timeout=5)
+        response = requests.get('http://relay-go:7447/api/stats', timeout=5)
         if response.status_code == 200:
             return jsonify(response.json())
         else:
@@ -211,7 +209,7 @@ def relay_stats():
 def relay_nips():
     """Get supported NIPs - from Go relay info"""
     try:
-        response = requests.get('http://relay-go:8080/', timeout=5)
+        response = requests.get('http://relay-go:7447/', timeout=5)
         if response.status_code == 200:
             data = response.json()
             return jsonify({
@@ -316,55 +314,3 @@ def serve_static(filename):
 def not_found(error):
     return send_from_directory(app.static_folder, '404.html'), 404
 
-# Background cache update scheduler
-def run_cache_update():
-    """Run cache update in background"""
-    try:
-        print(f"Running scheduled cache update at {datetime.now()}")
-        nostr_client.update_cache()
-        print("Scheduled cache update completed")
-    except Exception as e:
-        print(f"Scheduled cache update failed: {e}")
-
-def schedule_cache_updates():
-    """Schedule regular cache updates"""
-    schedule.every(config.CACHE_UPDATE_INTERVAL).hours.do(run_cache_update)
-    
-    while True:
-        schedule.run_pending()
-        time.sleep(60)  # Check every minute
-
-# Start background scheduler
-def start_scheduler():
-    scheduler_thread = threading.Thread(target=schedule_cache_updates, daemon=True)
-    scheduler_thread.start()
-
-if __name__ == '__main__':
-    print("🚀 Starting Nostr Home Hub...")
-    print(f"📊 Using npub: {config.NOSTR_NPUB}")
-    print(f"🌐 Connecting to {len(config.NOSTR_RELAYS)} relays")
-    
-    # Start the background scheduler
-    start_scheduler()
-    
-    print(f"🌐 Web Interface: http://localhost:{config.PORT}")
-    print(f"📡 Nostr Relay: ws://localhost:{config.PORT}/socket.io/")
-    print(f"📝 Make sure your npub is correct in config.py!")
-    
-    if config.RELAY_ENABLED:
-        print(f"🚀 Relay Info: http://localhost:{config.PORT}/api/relay/info")
-        print(f"📊 Relay Stats: http://localhost:{config.PORT}/api/relay/stats")
-    
-    # Use SocketIO to run the app with WebSocket support
-    socketio.run(app, host='0.0.0.0', port=config.PORT, debug=False)
-
-# For gunicorn compatibility
-def create_app():
-    print("🚀 Starting Nostr Home Hub (Production)...")
-    print(f"📊 Using npub: {config.NOSTR_NPUB}")
-    print(f"🌐 Connecting to {len(config.NOSTR_RELAYS)} relays")
-    
-    # Start the background scheduler
-    start_scheduler()
-    
-    return app

@@ -8,6 +8,7 @@ import hashlib
 import binascii
 import config
 from database import NostrDatabase
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class NostrContentClient:
     def __init__(self):
@@ -21,73 +22,312 @@ class NostrContentClient:
             return self.bech32_decode(npub)
         except Exception as e:
             print(f"Error converting npub to hex: {e}")
-            return npub
+            return None
     
-    def bech32_decode(self, npub: str) -> str:
-        """Simple bech32 decode for npub - for production use proper library"""
-        # This is a simplified version - for production, use a proper bech32 library
-        # For now, we'll use a hard-coded conversion for the provided npub
-        if npub == "npub13hyx3qsqk3r7ctjqrr49uskut4yqjsxt8uvu4rekr55p08wyhf0qq90nt7":
-            return "8dc8688200b447ec2e4018ea5e42dc5d480940cb3f19ca8f361d28179dc4ba5e"
-        return npub
+    def bech32_decode(self, bech_str: str) -> str:
+        """Decode a bech32 string to hex"""
+        charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+        
+        if not bech_str.startswith('npub'):
+            raise ValueError("Invalid npub format")
+        
+        # Remove the prefix
+        data = bech_str[4:]
+        
+        # Convert from bech32 to 5-bit groups
+        values = []
+        for char in data:
+            if char not in charset:
+                continue
+            values.append(charset.index(char))
+        
+        # Convert 5-bit groups to 8-bit bytes
+        bits = 0
+        value = 0
+        bytes_arr = []
+        
+        for v in values:
+            value = (value << 5) | v
+            bits += 5
+            
+            while bits >= 8:
+                bits -= 8
+                bytes_arr.append((value >> bits) & 0xff)
+        
+        # Remove checksum (last 6 bytes)
+        bytes_arr = bytes_arr[:-6]
+        
+        # Convert to hex
+        return ''.join(format(b, '02x') for b in bytes_arr)
     
-    def has_image(self, content: str, tags: List[List[str]]) -> Optional[str]:
-        """Check if content contains an image and return the URL"""
-        # Check content for image URLs
-        image_regex = r'https?://[^\s]+\.(jpg|jpeg|png|gif|webp|svg)'
-        content_match = re.search(image_regex, content, re.IGNORECASE)
-        if content_match:
-            return content_match.group(0)
+    def create_filter(self, pubkey: str, since: Optional[int] = None) -> Dict:
+        """Create a filter for querying events"""
+        filter_obj = {
+            "authors": [pubkey],
+            "kinds": [1, 30023, 0, 3]  # Regular notes, long-form, profiles, contacts
+        }
         
-        # Check tags for image URLs
-        for tag in tags:
-            if len(tag) >= 2 and tag[0] in ['url', 'r']:
-                url_match = re.search(image_regex, tag[1], re.IGNORECASE)
-                if url_match:
-                    return url_match.group(0)
-        
-        return None
+        if since:
+            filter_obj["since"] = since
+            
+        return filter_obj
     
-    def is_long_form_post(self, event_data: Dict) -> bool:
-        """Determine if this is a proper long-form post (NIP-23 kind 30023 or structured content)"""
+    def create_subscription(self, filter_obj: Dict) -> tuple:
+        """Create a subscription message"""
+        sub_id = hashlib.sha256(str(time.time()).encode()).hexdigest()[:16]
+        message = json.dumps(["REQ", sub_id, filter_obj])
+        return sub_id, message
+    
+    def extract_image_urls(self, content: str) -> List[str]:
+        """Extract image URLs from note content"""
+        image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp')
+        url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+\.(?:jpg|jpeg|png|gif|webp|svg|bmp)'
         
-        kind = event_data.get('kind', 1)
-        content = event_data.get('content', '').strip()
-        tags = event_data.get('tags', [])
-        
-        # NIP-23 Long-form content (kind 30023) is always a post
-        if kind == 30023:
+        urls = re.findall(url_pattern, content, re.IGNORECASE)
+        return list(set(urls))  # Remove duplicates
+    
+    def is_first_run(self) -> bool:
+        """Check if this is the first run (empty database)"""
+        try:
+            # Check using the existing database method
+            last_timestamp = self.db.get_last_event_timestamp()
+            
+            # If no timestamp found, it's likely first run
+            is_first = last_timestamp is None
+            
+            if is_first:
+                print("🆕 First run detected - will perform deep historical fetch")
+            else:
+                print(f"📊 Found existing events (last: {time.strftime('%Y-%m-%d', time.localtime(last_timestamp))}) - will fetch only recent updates")
+                
+            return is_first
+            
+        except Exception as e:
+            print(f"Error checking first run status: {e}")
+            return True  # Assume first run on error
+    
+    def is_long_form_post(self, event: Dict) -> bool:
+        """Check if event is a long-form post (NIP-23 or has title tag)"""
+        # NIP-23 long-form content
+        if event.get('kind') == 30023:
             return True
         
-        # For kind 1 events, check if they have title tags (indicating long-form structure)
-        if kind == 1:
-            # Check for title tag (NIP-23 style)
-            for tag in tags:
-                if len(tag) >= 2 and tag[0] == 'title' and tag[1].strip():
-                    return True
+        # Check for title tag in regular notes
+        tags = event.get('tags', [])
+        has_title = any(tag[0] == 'title' for tag in tags if tag)
         
-        return False
-
+        # Check for markdown-like content or significant length
+        content = event.get('content', '')
+        has_markdown = bool(re.search(r'^#{1,6}\s+.+|^[-*+]\s+.+|\[.+\]\(.+\)', content, re.MULTILINE))
+        is_long = len(content) > 800  # Arbitrary threshold for "long" content
+        
+        return has_title or (has_markdown and is_long)
+    
+    def fetch_events_simple(self, pubkey: str, since: Optional[int] = None) -> List[Dict]:
+        """Fetch events using concurrent connections with timeouts"""
+        all_events = []
+        unique_events = {}
+        
+        # Calculate and display time range for better logging
+        if since:
+            time_range = int(time.time()) - since
+            days = time_range / (24 * 60 * 60)
+            
+            if days > 7:
+                print(f"📚 Deep fetch: Getting {days:.1f} days of history...")
+            else:
+                print(f"🔄 Incremental fetch: Getting updates from last {days:.1f} days")
+        
+        print(f"🚀 Fetching from {len(self.relays)} relays concurrently...")
+        
+        def fetch_with_timeout(relay_url, timeout=10):
+            try:
+                print(f"🔍 Connecting to: {relay_url}")
+                events = self._fetch_from_single_relay_timeout(relay_url, pubkey, since, timeout)
+                return relay_url, events
+            except Exception as e:
+                print(f"❌ Error with {relay_url}: {e}")
+                return relay_url, []
+        
+        # Use ThreadPoolExecutor for concurrent fetching
+        with ThreadPoolExecutor(max_workers=len(self.relays)) as executor:
+            # Submit all relay fetch tasks
+            future_to_relay = {
+                executor.submit(fetch_with_timeout, relay_url): relay_url 
+                for relay_url in self.relays
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_relay):
+                relay_url = future_to_relay[future]
+                try:
+                    relay_url, events = future.result()
+                    if events:
+                        print(f"✅ Found {len(events)} events from {relay_url}")
+                        for event in events:
+                            event_id = event.get('id')
+                            if event_id and event_id not in unique_events:
+                                unique_events[event_id] = event
+                    else:
+                        print(f"⚪ No events from {relay_url}")
+                except Exception as e:
+                    print(f"❌ Failed to fetch from {relay_url}: {e}")
+        
+        all_events = list(unique_events.values())
+        print(f"📊 Total unique events: {len(all_events)}")
+        return all_events
+    
+    def _fetch_from_single_relay_timeout(self, relay_url: str, pubkey: str, since: Optional[int] = None, timeout: int = 10) -> List[Dict]:
+        """Fetch from a single relay with timeout"""
+        events = []
+        ws = None
+        event_queue = []
+        connection_complete = threading.Event()
+        
+        def on_message(ws, message):
+            try:
+                data = json.loads(message)
+                if data[0] == "EVENT":
+                    event_queue.append(data[2])
+                elif data[0] == "EOSE":
+                    connection_complete.set()
+            except:
+                pass
+        
+        def on_error(ws, error):
+            connection_complete.set()
+        
+        def on_open(ws):
+            filter_obj = self.create_filter(pubkey, since)
+            sub_id, sub_message = self.create_subscription(filter_obj)
+            ws.send(sub_message)
+        
+        def on_close(ws, close_status_code, close_msg):
+            connection_complete.set()
+        
+        try:
+            ws = websocket.WebSocketApp(
+                relay_url,
+                on_message=on_message,
+                on_error=on_error,
+                on_open=on_open,
+                on_close=on_close
+            )
+            
+            # Run WebSocket in a separate thread
+            ws_thread = threading.Thread(target=ws.run_forever, kwargs={'ping_interval': 30, 'ping_timeout': 10})
+            ws_thread.daemon = True
+            ws_thread.start()
+            
+            # Wait for completion or timeout
+            if connection_complete.wait(timeout):
+                # Return all collected events
+                events = event_queue
+            
+            # Close WebSocket
+            if ws:
+                ws.close()
+            
+        except Exception as e:
+            print(f"WebSocket connection failed for {relay_url}: {e}")
+        
+        return events
+    
+    def update_cache(self) -> Dict[str, int]:
+        """Update the cache with new events - smart fetching based on first run"""
+        try:
+            print("Starting Nostr cache update with Python client...")
+            
+            pubkey = self.npub_to_hex(self.npub)
+            if not pubkey:
+                raise ValueError("Invalid npub provided")
+            
+            print(f"Using pubkey: {pubkey}")
+            
+            # Check if this is the first run
+            is_first = self.is_first_run()
+            
+            if is_first:
+                # FIRST RUN: Deep historical fetch
+                # Try to get up to 90 days of history
+                since = int(time.time()) - (90 * 24 * 60 * 60)  # 90 days ago
+                print(f"🎉 First run! Fetching all content from the last 90 days...")
+                print(f"📅 Fetching events since: {time.strftime('%Y-%m-%d', time.localtime(since))}")
+            else:
+                # SUBSEQUENT RUNS: Only get recent updates
+                last_event = self.db.get_last_event_timestamp()
+                if last_event:
+                    # Add a small buffer (5 minutes) to avoid missing events
+                    since = last_event - 300  
+                    print(f"🔄 Update run: Fetching new events since last update")
+                    print(f"📅 Last event: {time.strftime('%Y-%m-%d %H:%M', time.localtime(last_event))}")
+                else:
+                    # Fallback to 7 days if no timestamp found
+                    since = int(time.time()) - (7 * 24 * 60 * 60)
+                    print(f"⚠️ No last timestamp found, fetching last 7 days")
+            
+            print(f"Fetching events since timestamp: {since}")
+            
+            # Fetch events with appropriate time range
+            events = self.fetch_events_simple(pubkey, since)
+            print(f"Fetched {len(events)} total events from all relays")
+            
+            if events:
+                # Show sample of what we found
+                print("Sample event:", events[0] if events else "None")
+                
+                # Sort by timestamp to see range
+                sorted_events = sorted(events, key=lambda x: x.get('created_at', 0))
+                if sorted_events:
+                    oldest = sorted_events[0].get('created_at', 0)
+                    newest = sorted_events[-1].get('created_at', 0)
+                    print(f"📅 Event date range: {time.strftime('%Y-%m-%d', time.localtime(oldest))} to {time.strftime('%Y-%m-%d', time.localtime(newest))}")
+            
+            processed = self.process_events(events)
+            print(f"Processed: {processed['posts']} posts, {processed['quips']} quips, {processed['images']} images")
+            
+            # If this was a first run with lots of data, note it
+            if is_first and sum(processed.values()) > 20:
+                print(f"✨ Successfully loaded your historical Nostr content!")
+                print(f"   Future updates will only fetch new content")
+            
+            return processed
+            
+        except Exception as e:
+            print(f"Error updating cache: {e}")
+            raise e
+    
+    def fetch_all_events(self, pubkey: str) -> List[Dict]:
+        """Fetch all events (no time limit) for testing"""
+        print("Fetching ALL events (no time limit)...")
+        return self.fetch_events_simple(pubkey, since=None)
+    
     def process_events(self, events: List[Dict]) -> Dict[str, int]:
-        """Process and categorize events with improved logic"""
+        """Process and store events in the database"""
         processed = {'posts': 0, 'quips': 0, 'images': 0}
         
-        for event_data in events:
+        for event in events:
             try:
-                content = event_data.get('content', '').strip()
+                # Prepare event data with standardized structure
+                event_data = {
+                    'id': event.get('id'),
+                    'content': event.get('content', ''),
+                    'created_at': event.get('created_at'),
+                    'pubkey': event.get('pubkey'),
+                    'kind': event.get('kind', 1),
+                    'tags': event.get('tags', [])
+                }
                 
-                # Skip empty content
-                if not content:
-                    continue
+                content = event_data['content']
+                tags = event_data['tags']
                 
-                tags = event_data.get('tags', [])
-                
-                # Check if it's an image post
-                image_url = self.has_image(content, tags)
-                
-                if image_url:
-                    self.db.save_image(event_data, image_url)
-                    processed['images'] += 1
+                # Check for images first
+                image_urls = self.extract_image_urls(content)
+                if image_urls:
+                    # Process each image URL
+                    for image_url in image_urls:
+                        self.db.save_image(event_data, image_url)
+                        processed['images'] += 1
                 elif self.is_long_form_post(event_data):
                     # Save as post if it's NIP-23 long-form or has title tags
                     self.db.save_post(event_data)
@@ -102,220 +342,5 @@ class NostrContentClient:
             except Exception as e:
                 print(f"Error processing event: {e}")
                 continue
-        
+                
         return processed
-    
-    def fetch_events_simple(self, pubkey: str, since: Optional[int] = None) -> List[Dict]:
-        """Fetch events using concurrent connections with timeouts"""
-        import threading
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        import time
-        
-        all_events = []
-        
-        def fetch_with_timeout(relay_url, timeout=10):
-            """Fetch from a single relay with timeout"""
-            try:
-                print(f"🔍 Connecting to: {relay_url}")
-                events = self._fetch_from_single_relay_timeout(relay_url, pubkey, since, timeout)
-                if events:
-                    print(f"✅ Found {len(events)} events from {relay_url}")
-                else:
-                    print(f"⚪ No events from {relay_url}")
-                return events
-            except Exception as e:
-                print(f"❌ Failed {relay_url}: {str(e)[:50]}...")
-                return []
-        
-        # Use ThreadPoolExecutor for concurrent fetching
-        print(f"🚀 Fetching from {len(self.relays)} relays concurrently...")
-        
-        with ThreadPoolExecutor(max_workers=len(self.relays)) as executor:
-            # Submit all relay fetch tasks
-            future_to_relay = {
-                executor.submit(fetch_with_timeout, relay_url): relay_url 
-                for relay_url in self.relays
-            }
-            
-            # Collect results as they complete (with overall timeout)
-            for future in as_completed(future_to_relay, timeout=30):
-                try:
-                    events = future.result()
-                    all_events.extend(events)
-                except Exception as e:
-                    relay_url = future_to_relay[future]
-                    print(f"❌ Timeout/Error {relay_url}: {e}")
-        
-        # Remove duplicates based on event ID
-        unique_events = {}
-        for event in all_events:
-            event_id = event.get('id')
-            if event_id and event_id not in unique_events:
-                unique_events[event_id] = event
-        
-        print(f"📊 Total unique events: {len(unique_events)}")
-        return list(unique_events.values())
-    
-    def _fetch_from_single_relay_timeout(self, relay_url: str, pubkey: str, since: Optional[int] = None, timeout: int = 10) -> List[Dict]:
-        """Fetch events from a single relay with timeout"""
-        import threading
-        import time
-        
-        events = []
-        connection_complete = threading.Event()
-        
-        def on_message(ws, message):
-            try:
-                data = json.loads(message)
-                if isinstance(data, list) and len(data) >= 3:
-                    if data[0] == "EVENT":
-                        event = data[2]
-                        if event.get('pubkey') == pubkey:
-                            events.append(event)
-                    elif data[0] == "EOSE":
-                        connection_complete.set()
-                        ws.close()
-            except json.JSONDecodeError:
-                pass
-            except Exception as e:
-                pass
-        
-        def on_error(ws, error):
-            connection_complete.set()
-        
-        def on_close(ws, close_status_code, close_msg):
-            connection_complete.set()
-        
-        def on_open(ws):
-            # Create subscription request
-            req_filter = {
-                "authors": [pubkey],
-                "kinds": [1, 30023]  # Text notes and long-form content (NIP-23)
-            }
-            if since:
-                req_filter["since"] = since
-            
-            subscription_id = f"sub_{int(time.time())}"
-            request = ["REQ", subscription_id, req_filter]
-            ws.send(json.dumps(request))
-        
-        try:
-            ws = websocket.WebSocketApp(
-                relay_url,
-                on_message=on_message,
-                on_error=on_error,
-                on_close=on_close,
-                on_open=on_open
-            )
-            
-            # Start connection in a thread
-            def run_ws():
-                ws.run_forever()
-            
-            ws_thread = threading.Thread(target=run_ws)
-            ws_thread.daemon = True
-            ws_thread.start()
-            
-            # Wait for completion or timeout
-            connection_complete.wait(timeout=timeout)
-            
-            # Clean up
-            if ws:
-                ws.close()
-            
-            return events
-            
-        except Exception as e:
-            raise Exception(f"Connection failed: {e}")
-
-    def _fetch_from_single_relay(self, relay_url: str, pubkey: str, since: Optional[int] = None) -> List[Dict]:
-        """Fetch events from a single relay"""
-        events = []
-        
-        def on_message(ws, message):
-            try:
-                data = json.loads(message)
-                if isinstance(data, list) and len(data) >= 3:
-                    if data[0] == "EVENT":
-                        event = data[2]
-                        if event.get('pubkey') == pubkey:
-                            events.append(event)
-                    elif data[0] == "EOSE":
-                        ws.close()
-            except json.JSONDecodeError:
-                pass
-            except Exception as e:
-                print(f"Error processing message: {e}")
-        
-        def on_error(ws, error):
-            print(f"WebSocket error: {error}")
-        
-        def on_close(ws, close_status_code, close_msg):
-            pass
-        
-        def on_open(ws):
-            # Create subscription request
-            subscription_id = f"sub_{int(time.time())}"
-            filters = {
-                "authors": [pubkey],
-                "kinds": [1, 30023]  # Text notes and long-form content (NIP-23)
-            }
-            
-            if since:
-                filters["since"] = since
-            
-            request = ["REQ", subscription_id, filters]
-            ws.send(json.dumps(request))
-        
-        try:
-            ws = websocket.WebSocketApp(
-                relay_url,
-                on_open=on_open,
-                on_message=on_message,
-                on_error=on_error,
-                on_close=on_close
-            )
-            
-            # Run with timeout
-            ws.run_forever(ping_interval=30, ping_timeout=10)
-            
-        except Exception as e:
-            print(f"WebSocket connection failed for {relay_url}: {e}")
-        
-        return events
-    
-    def update_cache(self) -> Dict[str, int]:
-        """Update the cache with new events"""
-        try:
-            print("Starting Nostr cache update with Python client...")
-            
-            pubkey = self.npub_to_hex(self.npub)
-            if not pubkey:
-                raise ValueError("Invalid npub provided")
-            
-            print(f"Using pubkey: {pubkey}")
-            
-            # Get the timestamp of the most recent cached event
-            last_event = self.db.get_last_event_timestamp()
-            since = last_event if last_event else int(time.time()) - (7 * 24 * 60 * 60)  # 7 days ago
-            
-            print(f"Fetching events since: {since}")
-            
-            events = self.fetch_events_simple(pubkey, since)
-            print(f"Fetched {len(events)} total events from all relays")
-            
-            if events:
-                print("Sample event:", events[0] if events else "None")
-            
-            processed = self.process_events(events)
-            print(f"Processed: {processed['posts']} posts, {processed['quips']} quips, {processed['images']} images")
-            
-            return processed
-            
-        except Exception as e:
-            print(f"Error updating cache: {e}")
-            raise e
-    
-    def fetch_all_events(self, pubkey: str) -> List[Dict]:
-        """Fetch all events (no time limit) for testing"""
-        return self.fetch_events_simple(pubkey, since=0)

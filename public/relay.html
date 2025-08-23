@@ -1,6 +1,8 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
+    <script>if(localStorage.getItem("theme")==="dark")document.documentElement.setAttribute("data-theme","dark");</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nostr Relay - Nostr Home</title>
@@ -156,41 +158,14 @@
         </section>
     </main>
 
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Nostr Home. Powered by Nostr protocol.</p>
+        </div>
+    </footer>
+
     <script src="site-config.js"></script>
     <script src="relay.js"></script>
-    <script>
-        // Theme toggle functionality (shared across all pages)
-        const themeToggle = document.getElementById('theme-toggle');
-        const themeIcon = document.querySelector('.theme-icon');
-        
-        // Check for saved theme preference or default to 'light'
-        const currentTheme = localStorage.getItem('theme') || 'light';
-        document.documentElement.setAttribute('data-theme', currentTheme);
-        themeIcon.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
-        
-        themeToggle.addEventListener('click', () => {
-            const theme = document.documentElement.getAttribute('data-theme');
-            const newTheme = theme === 'dark' ? 'light' : 'dark';
-            
-            document.documentElement.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            themeIcon.textContent = newTheme === 'dark' ? '☀️' : '🌙';
-        });
-
-        // Copy to clipboard functionality
-        function copyToClipboard(elementId) {
-            const element = document.getElementById(elementId);
-            const text = element.textContent;
-            navigator.clipboard.writeText(text).then(() => {
-                // Show feedback
-                const btn = element.nextElementSibling;
-                const originalText = btn.textContent;
-                btn.textContent = '✅';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                }, 1000);
-            });
-        }
-    </script>
 </body>
 </html>

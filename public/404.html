@@ -1,6 +1,8 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
+    <script>if(localStorage.getItem("theme")==="dark")document.documentElement.setAttribute("data-theme","dark");</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Page Not Found - Nostr Home</title>
@@ -65,55 +67,7 @@
         </div>
     </footer>
 
+
     <script src="site-config.js"></script>
-    <script>
-        // Theme management for 404 page
-        class ThemeManager {
-            constructor() {
-                this.init();
-            }
-
-            init() {
-                // Check for saved theme or default to light
-                const savedTheme = localStorage.getItem('theme') || 'light';
-                this.setTheme(savedTheme);
-                
-                // Set up theme toggle button
-                const themeToggle = document.getElementById('theme-toggle');
-                if (themeToggle) {
-                    themeToggle.addEventListener('click', () => this.toggleTheme());
-                }
-            }
-
-            setTheme(theme) {
-                if (theme === 'dark') {
-                    document.documentElement.setAttribute('data-theme', 'dark');
-                    this.updateToggleIcon('☀️');
-                } else {
-                    document.documentElement.removeAttribute('data-theme');
-                    this.updateToggleIcon('🌙');
-                }
-                localStorage.setItem('theme', theme);
-            }
-
-            toggleTheme() {
-                const currentTheme = localStorage.getItem('theme') || 'light';
-                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-                this.setTheme(newTheme);
-            }
-
-            updateToggleIcon(icon) {
-                const themeIcon = document.querySelector('.theme-icon');
-                if (themeIcon) {
-                    themeIcon.textContent = icon;
-                }
-            }
-        }
-
-        // Initialize theme manager
-        document.addEventListener('DOMContentLoaded', () => {
-            new ThemeManager();
-        });
-    </script>
 </body>
 </html>

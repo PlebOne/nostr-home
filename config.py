@@ -23,7 +23,7 @@ NOSTR_RELAYS = [
 DATABASE_PATH = './data/nostr_content.db'
 
 # Cache settings
-CACHE_UPDATE_INTERVAL = 6  # hours
+CACHE_UPDATE_INTERVAL = 0.5  # hours (30 minutes)
 CACHE_DIR = './cache'
 
 # Server settings

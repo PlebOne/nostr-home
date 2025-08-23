@@ -22,19 +22,20 @@ services:
   relay-go:
     build: ./relay-go
     ports:
-      - "8080:8080"
+      - "7447:7447"
     environment:
       - NOSTR_NPUB=${NOSTR_NPUB}
       - RELAY_OWNER_ONLY=${RELAY_OWNER_ONLY:-true}
       - RELAY_NAME=${SITE_NAME:-Nostr Home} Relay
       - RELAY_DESCRIPTION=Enhanced personal Nostr relay with multi-NIP support
       - RELAY_CONTACT=${RELAY_CONTACT:-admin@localhost}
+      - NOTIFY_URL=http://nostr-home:3000/api/update-cache
     volumes:
       - ./data:/app/data
     networks:
       - nostr-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7447/health"]
       interval: 30s
       timeout: 10s
       retries: 3
