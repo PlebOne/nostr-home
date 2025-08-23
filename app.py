@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request, send_from_directory
 import time
+import subprocess
+import re
 from datetime import datetime
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -167,49 +169,103 @@ def update_cache():
 def relay_info():
     """Get relay information (NIP-11) - proxied from Go relay"""
     try:
-        response = requests.get('http://relay-go:7447/', timeout=5)
+        # Get NIP-11 relay info from rnostr
+        response = requests.get("http://172.18.0.2:8080/", timeout=5, headers={"Accept": "application/nostr+json"})
         if response.status_code == 200:
-            return jsonify(response.json())
+            relay_info = response.json()
+            # rnostr provides NIP-11 compliant info directly
+            return jsonify(relay_info)
         else:
-            return jsonify({'error': 'Go relay not responding'}), 502
+            return jsonify({"error": "Go relay not responding"}), 502
     except Exception as e:
         print(f"Error connecting to Go relay: {e}")
-        return jsonify({'error': 'Go relay not available'}), 502
+        return jsonify({"error": "Go relay not available"}), 502
 
-@app.route('/api/relay/stats')
+@app.route("/api/relay/stats")
 def relay_stats():
-    """Get relay statistics - proxied from Go relay"""
+    """Get relay statistics from rnostr Prometheus metrics"""
     try:
-        response = requests.get('http://relay-go:7447/stats', timeout=5)
+        import re
+        
+        # Get Prometheus metrics from rnostr
+        response = requests.get("http://172.18.0.2:8080/metrics?auth=auth_key", timeout=5)
         if response.status_code == 200:
-            return jsonify(response.json())
-        else:
-            # Fallback to basic stats if Go relay doesn't respond
+            metrics_text = response.text
+            
+            # Parse Prometheus metrics
+            stats = {
+                "relay_events": 0,
+                "new_events": 0,
+                "total_sessions": 0,
+                "active_sessions": 0,
+                "total_requests": 0,
+                "event_commands": 0,
+                "close_commands": 0,
+                "database_writes": 0,
+                "database_reads": 0,
+                "uptime_seconds": round(time.time() - APP_START_TIME),
+                "uptime_hours": round((time.time() - APP_START_TIME) / 3600, 1),
+                "relay_software": "rnostr v0.4.8",
+                "supported_nips": [1, 2, 4, 9, 11, 12, 15, 16, 20, 22, 25, 26, 28, 33, 40, 70],
+                "status": "online"
+            }
+            
+            # Parse metrics with regex
+            patterns = {
+                "new_events": r"nostr_relay_new_event (\d+)",
+                "total_sessions": r"nostr_relay_session_total (\d+)",
+                "active_sessions": r"nostr_relay_session (\d+)",
+                "event_commands": r"nostr_relay_message_total\{command=\"EVENT\"\} (\d+)",
+                "close_commands": r"nostr_relay_message_total\{command=\"CLOSE\"\} (\d+)",
+                "database_writes": r"nostr_relay_db_write_count (\d+)",
+                "database_reads": r"nostr_relay_db_get_count (\d+)"
+            }
+            
+            for key, pattern in patterns.items():
+                match = re.search(pattern, metrics_text)
+                if match:
+                    stats[key] = int(match.group(1))
+            
+            # Calculate total requests from REQ commands
+            req_match = re.search(r"nostr_relay_message_total\{command=\"REQ\"\} (\d+)", metrics_text)
+            if req_match:
+                stats["total_requests"] = int(req_match.group(1))
+            
+            # Set relay_events to new_events for now (could be expanded)
+            stats["relay_events"] = stats["new_events"]
+            
+            # Get our local content counts
             counts = db.get_counts()
-            return jsonify({
-                'total_events': counts['posts'] + counts['quips'] + counts['images'],
-                'unique_pubkeys': 1,
-                'websocket_connections': 0,
-                'events_24h': 0,
-                'uptime': time.time() - APP_START_TIME
-            })
+            stats["local_content"] = counts["posts"] + counts["quips"] + counts["images"]
+            stats["total_content"] = stats["relay_events"] + stats["local_content"]
+            
+            return jsonify(stats)
+            
+        else:
+            raise Exception(f"Metrics endpoint returned {response.status_code}")
+            
     except Exception as e:
-        print(f"Error connecting to Go relay for stats: {e}")
-        # Fallback to basic stats
+        print(f"Error getting relay metrics: {e}")
+        # Fallback stats
         counts = db.get_counts()
         return jsonify({
-            'total_events': counts['posts'] + counts['quips'] + counts['images'],
-            'unique_pubkeys': 1,
-            'websocket_connections': 0,
-            'events_24h': 0,
-            'uptime': time.time() - APP_START_TIME
+            "relay_events": 0,
+            "new_events": 0,
+            "total_sessions": 0,
+            "active_sessions": 0,
+            "local_content": counts["posts"] + counts["quips"] + counts["images"],
+            "total_content": counts["posts"] + counts["quips"] + counts["images"],
+            "uptime_seconds": round(time.time() - APP_START_TIME),
+            "uptime_hours": round((time.time() - APP_START_TIME) / 3600, 1),
+            "relay_software": "rnostr v0.4.8",
+            "status": "online"
         })
 
 @app.route('/api/relay/nips')
 def relay_nips():
     """Get supported NIPs - from Go relay info"""
     try:
-        response = requests.get('http://relay-go:7447/', timeout=5)
+        response = requests.get('http://172.18.0.2:8080/', timeout=5)
         if response.status_code == 200:
             data = response.json()
             return jsonify({
@@ -232,8 +288,47 @@ def relay_nips():
             'count': len(fallback_nips)
         })
 
-@app.route('/api/relay/activity')
+@app.route("/api/relay/activity")
 def relay_activity():
+    """Get recent relay activity"""
+    try:
+        # Get our local content as activity since rnostr doesnt expose event details
+        recent_posts = db.get_posts(limit=5, page=1)['posts']
+        recent_quips = db.get_quips(limit=5)
+        
+        activity = []
+        
+        # Add recent posts
+        for post in recent_posts:
+            activity.append({
+                'type': 'note',
+                'id': post['id'],
+                'created_at': post['created_at'],
+                'content_preview': post['content'][:100] + '...' if len(post['content']) > 100 else post['content']
+            })
+        
+        # Add recent quips
+        for quip in recent_quips:
+            activity.append({
+                'type': 'note',
+                'id': quip['id'],
+                'created_at': quip['created_at'],
+                'content_preview': quip['content'][:100] + '...' if len(quip['content']) > 100 else quip['content']
+            })
+        
+        # Sort by created_at descending
+        activity.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        return jsonify({
+            'activity': activity[:10],  # Return top 10 most recent
+            'total_events': len(activity),
+            'last_updated': datetime.now().isoformat()
+        })
+    
+    except Exception as e:
+        print(f"Error getting relay activity: {e}")
+        return jsonify({'activity': [], 'error': 'Failed to get relay activity'}), 500
+
     """Get recent relay activity"""
     if not relay:
         return jsonify({'error': 'Relay not enabled'}), 404
@@ -313,4 +408,39 @@ def serve_static(filename):
 @app.errorhandler(404)
 def not_found(error):
     return send_from_directory(app.static_folder, '404.html'), 404
+
+
+
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=3000)
+
+# Simple working scheduler
+import threading
+import time
+
+def simple_scheduler():
+    """Simple background scheduler that updates content every 30 minutes"""
+    def scheduler_loop():
+        print("[Scheduler] Starting content update scheduler...")
+        time.sleep(60)  # Wait 1 minute after startup
+        
+        while True:
+            try:
+                print("[Scheduler] Running scheduled content update...")
+                result = nostr_client.update_cache()
+                print(f"[Scheduler] Update completed: {result}")
+            except Exception as e:
+                print(f"[Scheduler] Error during update: {e}")
+            
+            # Wait 30 minutes (1800 seconds)
+            time.sleep(1800)
+    
+    # Start scheduler in background thread
+    thread = threading.Thread(target=scheduler_loop, daemon=True)
+    thread.start()
+    print("[Scheduler] Background scheduler initialized")
+
+# Start scheduler automatically
+simple_scheduler()
 

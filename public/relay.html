@@ -33,45 +33,74 @@
     <main class="main-content">
         <section class="relay-hero">
             <div class="hero-content">
-                <h1 class="hero-title">Enhanced Nostr Relay</h1>
-                <p class="hero-subtitle">A feature-rich Nostr relay supporting 23 NIPs with real-time statistics and advanced capabilities.</p>
+                <h1 class="hero-title">Personal Nostr Relay</h1>
+                <p class="hero-subtitle">High-performance rnostr relay with comprehensive NIP support and real-time metrics.</p>
                 <div class="relay-status">
                     <div class="status-indicator" id="relay-status">
                         <span class="status-dot"></span>
                         <span class="status-text">Checking...</span>
                     </div>
                 </div>
+                <div class="hero-actions">
+                    <div class="refresh-controls">
+                        <span class="last-updated" id="last-updated">Last updated: <span id="update-time">Loading...</span></span>
+                        <button class="refresh-btn" id="manual-refresh" onclick="dashboard && dashboard.forceRefresh()">
+                            🔄 Refresh Now
+                        </button>
+                    </div>
+                </div>
             </div>
         </section>
 
         <section class="relay-stats">
+            <div class="stats-header-centered">
+                <h2>Live Statistics</h2>
+                <div class="stats-info">
+                    <span class="update-indicator" id="update-indicator">●</span>
+                    <span class="update-status">Auto-refreshing every 10s</span>
+                </div>
+            </div>
             <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">🌐</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="active-sessions">-</div>
+                        <div class="stat-label">Active Connections</div>
+                    </div>
+                </div>
                 <div class="stat-card">
                     <div class="stat-icon">📊</div>
                     <div class="stat-content">
                         <div class="stat-number" id="total-events">-</div>
-                        <div class="stat-label">Total Events</div>
+                        <div class="stat-label">Events Stored</div>
                     </div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">👥</div>
                     <div class="stat-content">
-                        <div class="stat-number" id="unique-pubkeys">-</div>
-                        <div class="stat-label">Unique Authors</div>
+                        <div class="stat-number" id="total-sessions">-</div>
+                        <div class="stat-label">Total Sessions</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon">🔗</div>
+                    <div class="stat-icon">🔄</div>
                     <div class="stat-content">
-                        <div class="stat-number" id="websocket-connections">-</div>
-                        <div class="stat-label">Active Connections</div>
+                        <div class="stat-number" id="total-requests">-</div>
+                        <div class="stat-label">Requests Processed</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon">⚡</div>
+                    <div class="stat-icon">💾</div>
                     <div class="stat-content">
-                        <div class="stat-number" id="events-24h">-</div>
-                        <div class="stat-label">Events (24h)</div>
+                        <div class="stat-number" id="database-operations">-</div>
+                        <div class="stat-label">Database Operations</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="uptime">-</div>
+                        <div class="stat-label">Uptime</div>
                     </div>
                 </div>
             </div>
@@ -80,42 +109,40 @@
         <section class="relay-info">
             <div class="info-grid">
                 <div class="info-card">
-                    <h2>About This Relay</h2>
-                    <p id="relay-description">This is an enhanced Nostr relay built with advanced features and comprehensive NIP support. It provides a reliable, secure, and feature-rich environment for the Nostr ecosystem.</p>
-                    
-                    <div class="relay-features">
-                        <h3>Key Features</h3>
-                        <ul>
-                            <li>✅ WebSocket and HTTP API support</li>
-                            <li>✅ Advanced filtering and search capabilities</li>
-                            <li>✅ Rate limiting and DDoS protection</li>
-                            <li>✅ Event deletion and replacement</li>
-                            <li>✅ Authentication and authorization</li>
-                            <li>✅ Real-time statistics and monitoring</li>
-                            <li id="owner-only-feature" style="display: none;">🔒 Owner-only mode (restricted access)</li>
-                        </ul>
+                    <h2>Connection Information</h2>
+                    <div class="connection-details">
+                        <div class="connection-item">
+                            <strong>Relay URL (for Nostr clients):</strong>
+                            <code id="relay-url">wss://nostr.pleb.one</code>
+                            <button class="copy-btn" onclick="copyToClipboard('relay-url')">📋</button>
+                        </div>
+                        <div class="connection-item">
+                            <strong>NIP-11 Discovery:</strong>
+                            <code id="discovery-url">https://nostr.pleb.one</code>
+                            <button class="copy-btn" onclick="copyToClipboard('discovery-url')">📋</button>
+                        </div>
+                        <div class="connection-item">
+                            <strong>Relay Software:</strong>
+                            <code id="relay-software">rnostr v0.4.8</code>
+                        </div>
                     </div>
 
-                    <div class="connection-info">
-                        <h3>Connection Information</h3>
-                        <div class="connection-details">
-                            <div class="connection-item">
-                                <strong>WebSocket URL:</strong>
-                                <code id="websocket-url">ws://localhost:3000/ws</code>
-                                <button class="copy-btn" onclick="copyToClipboard('websocket-url')">📋</button>
-                            </div>
-                            <div class="connection-item">
-                                <strong>HTTP API:</strong>
-                                <code id="http-url">http://localhost:3000/api</code>
-                                <button class="copy-btn" onclick="copyToClipboard('http-url')">📋</button>
-                            </div>
-                        </div>
+                    <div class="relay-features">
+                        <h3>Relay Features</h3>
+                        <ul>
+                            <li>✅ High-performance Rust implementation</li>
+                            <li>✅ WebSocket and HTTP NIP-11 support</li>
+                            <li>✅ Prometheus metrics integration</li>
+                            <li>✅ Real-time event storage and retrieval</li>
+                            <li>✅ Advanced filtering and querying</li>
+                            <li>✅ Multiple NIP support for compatibility</li>
+                        </ul>
                     </div>
                 </div>
 
                 <div class="info-card">
                     <h2>Supported NIPs</h2>
-                    <p>This relay implements 23 Nostr Improvement Proposals (NIPs) for maximum compatibility:</p>
+                    <p>This relay implements <span id="nip-count">16</span> Nostr Improvement Proposals (NIPs):</p>
                     
                     <div class="nips-grid" id="nips-list">
                         <!-- NIPs will be loaded dynamically -->
@@ -126,19 +153,19 @@
                         <div class="legend-items">
                             <div class="legend-item">
                                 <span class="nip-badge basic">Basic</span>
-                                <span>Core protocol features</span>
+                                <span>Core protocol (1, 2, 4, 11)</span>
                             </div>
                             <div class="legend-item">
                                 <span class="nip-badge auth">Auth</span>
-                                <span>Authentication & security</span>
+                                <span>Authentication (22, 26, 42)</span>
                             </div>
                             <div class="legend-item">
                                 <span class="nip-badge advanced">Advanced</span>
-                                <span>Extended functionality</span>
+                                <span>Extended features (9, 12, 16, 20)</span>
                             </div>
                             <div class="legend-item">
                                 <span class="nip-badge social">Social</span>
-                                <span>Social media features</span>
+                                <span>Social features (25, 28, 33, 40)</span>
                             </div>
                         </div>
                     </div>
@@ -148,20 +175,24 @@
 
         <section class="relay-activity">
             <div class="activity-container">
-                <h2>Recent Activity</h2>
+                <div class="activity-header-centered">
+                    <h2>Recent Activity</h2>
+                    <div class="activity-info">
+                        <span class="activity-status" id="activity-status">Loading...</span>
+                    </div>
+                </div>
                 <div class="activity-feed" id="activity-feed">
                     <div class="activity-item loading">
-                        <div class="activity-content">Loading recent activity...</div>
+                        <div class="activity-content">Loading recent relay activity...</div>
                     </div>
                 </div>
             </div>
         </section>
     </main>
 
-
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2024 Nostr Home. Powered by Nostr protocol.</p>
+            <p>&copy; 2024 Nostr Home. Powered by rnostr relay.</p>
         </div>
     </footer>
 

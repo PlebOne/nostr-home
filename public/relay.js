@@ -1,286 +1,343 @@
-// Relay page JavaScript functionality
+// Enhanced Relay Dashboard with rnostr Prometheus metrics support
 class RelayDashboard {
     constructor() {
-        this.wsConnection = null;
         this.statsUpdateInterval = null;
         this.activityUpdateInterval = null;
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-        
+        this.lastUpdateTime = null;
+        this.isUpdating = false;
+        this.recentActivity = [];
         this.init();
     }
 
     init() {
-        this.loadNIPsList();
+        this.loadRelayInfo();
         this.startStatsUpdates();
         this.startActivityUpdates();
         this.checkRelayStatus();
-        this.updateConnectionUrls();
+        this.setupUpdateIndicators();
     }
 
-    updateConnectionUrls() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.host;
+    setupUpdateIndicators() {
+        this.updateLastUpdatedTime();
         
-        // Point to Go relay (port 8080) for WebSocket connections
-        const goRelayHost = host.includes(':') ? host.split(':')[0] + ':8080' : host + ':8080';
+        const manualRefresh = document.getElementById('manual-refresh');
+        if (manualRefresh) {
+            manualRefresh.addEventListener('click', () => this.forceRefresh());
+        }
+    }
+
+    updateLastUpdatedTime() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString();
+        const updateTimeEl = document.getElementById('update-time');
+        if (updateTimeEl) {
+            updateTimeEl.textContent = timeString;
+        }
+        this.lastUpdateTime = now;
+    }
+
+    setUpdateIndicator(isUpdating) {
+        const indicator = document.getElementById('update-indicator');
+        const refreshBtn = document.getElementById('manual-refresh');
         
-        document.getElementById('websocket-url').textContent = `${protocol}//${goRelayHost}/ws`;
-        document.getElementById('http-url').textContent = `${window.location.protocol}//${host}/api`;
+        if (indicator) {
+            indicator.style.color = isUpdating ? '#10b981' : '#6b7280';
+            indicator.style.animation = isUpdating ? 'pulse-indicator 1s infinite' : 'none';
+        }
+        
+        if (refreshBtn) {
+            refreshBtn.disabled = isUpdating;
+            refreshBtn.style.opacity = isUpdating ? '0.5' : '1';
+        }
+        
+        this.isUpdating = isUpdating;
+    }
+
+    async forceRefresh() {
+        if (this.isUpdating) return;
+        
+        console.log('Force refreshing all data...');
+        this.setUpdateIndicator(true);
+        
+        try {
+            await Promise.all([
+                this.updateStats(),
+                this.updateActivity(),
+                this.loadRelayInfo(),
+                this.checkRelayStatus()
+            ]);
+            this.updateLastUpdatedTime();
+        } finally {
+            this.setUpdateIndicator(false);
+        }
+    }
+
+    async loadRelayInfo() {
+        try {
+            const response = await fetch('/api/relay/stats');
+            if (response.ok) {
+                const info = await response.json();
+                
+                if (info.relay_software) {
+                    const softwareEl = document.getElementById('relay-software');
+                    if (softwareEl) {
+                        softwareEl.textContent = info.relay_software;
+                    }
+                }
+                
+                if (info.supported_nips) {
+                    const nipCountEl = document.getElementById('nip-count');
+                    if (nipCountEl) {
+                        nipCountEl.textContent = info.supported_nips.length;
+                    }
+                    this.displayNIPs(info.supported_nips);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading relay info:', error);
+        }
+    }
+
+    displayNIPs(nips) {
+        const nipsContainer = document.getElementById('nips-list');
+        if (!nipsContainer) return;
+        
+        nipsContainer.innerHTML = '';
+        
+        const nipCategories = {
+            basic: [1, 2, 4, 11],
+            auth: [22, 26, 42],
+            advanced: [9, 12, 15, 16, 20, 70],
+            social: [25, 28, 33, 40]
+        };
+        
+        nips.sort((a, b) => a - b).forEach(nip => {
+            const nipElement = document.createElement('div');
+            nipElement.className = 'nip-item';
+            
+            let category = 'advanced';
+            for (const [cat, nipList] of Object.entries(nipCategories)) {
+                if (nipList.includes(nip)) {
+                    category = cat;
+                    break;
+                }
+            }
+            
+            nipElement.innerHTML = `
+                <span class="nip-badge ${category}">NIP-${nip.toString().padStart(2, '0')}</span>
+            `;
+            
+            nipsContainer.appendChild(nipElement);
+        });
     }
 
     async checkRelayStatus() {
         const statusIndicator = document.getElementById('relay-status');
+        if (!statusIndicator) return;
+        
         const statusDot = statusIndicator.querySelector('.status-dot');
         const statusText = statusIndicator.querySelector('.status-text');
 
         try {
-            const response = await fetch('/api/relay/info');
+            const response = await fetch('/api/relay/stats');
             if (response.ok) {
-                const data = await response.json();
-                statusDot.className = 'status-dot online';
-                statusText.textContent = `Online - ${data.name || 'Enhanced Nostr Relay'}`;
-                
-                // Update description and features based on relay info
-                this.updateRelayDescription(data);
+                const stats = await response.json();
+                if (statusDot) statusDot.className = 'status-dot online';
+                if (statusText) statusText.textContent = `Online - ${stats.relay_software || 'rnostr'}`;
             } else {
-                throw new Error('Relay not responding');
+                throw new Error('Stats not responding');
             }
         } catch (error) {
-            statusDot.className = 'status-dot offline';
-            statusText.textContent = 'Offline';
+            if (statusDot) statusDot.className = 'status-dot offline';
+            if (statusText) statusText.textContent = 'Offline';
         }
-    }
-
-    updateRelayDescription(relayInfo) {
-        // Update description
-        const descriptionElement = document.getElementById('relay-description');
-        if (descriptionElement && relayInfo.description) {
-            descriptionElement.textContent = relayInfo.description;
-        }
-
-        // Show owner-only feature if restricted writes are enabled
-        if (relayInfo.limitation && relayInfo.limitation.restricted_writes) {
-            const ownerOnlyFeature = document.getElementById('owner-only-feature');
-            if (ownerOnlyFeature) {
-                ownerOnlyFeature.style.display = 'list-item';
-            }
-        }
-    }
-
-    async loadNIPsList() {
-        const nipsContainer = document.getElementById('nips-list');
-        
-        try {
-            const response = await fetch('/api/relay/nips');
-            if (response.ok) {
-                const data = await response.json();
-                this.renderNIPs(data.nips || [], nipsContainer);
-            } else {
-                // Fallback to known NIPs
-                const fallbackNIPs = [1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 15, 16, 20, 22, 25, 26, 28, 33, 40, 42, 45, 50, 65];
-                this.renderNIPs(fallbackNIPs, nipsContainer);
-            }
-        } catch (error) {
-            nipsContainer.innerHTML = '<p class="error">Failed to load NIPs information</p>';
-        }
-    }
-
-    renderNIPs(nips, container) {
-        const nipDescriptions = {
-            1: { title: 'Basic Protocol', desc: 'Basic protocol flow', category: 'basic' },
-            2: { title: 'Contact List', desc: 'Contact list and petnames', category: 'social' },
-            3: { title: 'Address Book', desc: 'OpenTimestamps attestations', category: 'basic' },
-            4: { title: 'Encrypted DMs', desc: 'Encrypted direct messages', category: 'auth' },
-            5: { title: 'Event Deletion', desc: 'Event deletion requests', category: 'advanced' },
-            9: { title: 'Event Deletion', desc: 'Event deletion', category: 'advanced' },
-            10: { title: 'Conventions', desc: 'On "e" and "p" tags', category: 'basic' },
-            11: { title: 'Relay Info', desc: 'Relay information document', category: 'basic' },
-            12: { title: 'Generic Tags', desc: 'Generic tag queries', category: 'advanced' },
-            13: { title: 'Proof of Work', desc: 'Proof of work', category: 'auth' },
-            15: { title: 'Marketplace', desc: 'End of stored events notice', category: 'advanced' },
-            16: { title: 'Replaceable Events', desc: 'Event treatment', category: 'advanced' },
-            20: { title: 'Command Results', desc: 'Command results', category: 'advanced' },
-            22: { title: 'Event Created At', desc: 'Event created_at limits', category: 'basic' },
-            25: { title: 'Reactions', desc: 'Reactions', category: 'social' },
-            26: { title: 'Delegated Events', desc: 'Delegated event signing', category: 'auth' },
-            28: { title: 'Public Chat', desc: 'Public chat', category: 'social' },
-            33: { title: 'Parameterized Replaceable Events', desc: 'Parameterized replaceable events', category: 'advanced' },
-            40: { title: 'Expiration', desc: 'Expiration timestamp', category: 'advanced' },
-            42: { title: 'Authentication', desc: 'Authentication of clients to relays', category: 'auth' },
-            45: { title: 'Event Counts', desc: 'Counting results', category: 'advanced' },
-            50: { title: 'Search', desc: 'Search capability', category: 'advanced' },
-            65: { title: 'Relay List', desc: 'Relay list metadata', category: 'basic' }
-        };
-
-        const nipElements = nips.map(nipNumber => {
-            const nip = nipDescriptions[nipNumber] || { 
-                title: `NIP-${nipNumber}`, 
-                desc: 'Advanced feature', 
-                category: 'advanced' 
-            };
-            
-            return `
-                <div class="nip-item">
-                    <div class="nip-header">
-                        <span class="nip-number">NIP-${nipNumber}</span>
-                        <span class="nip-badge ${nip.category}">${nip.category}</span>
-                    </div>
-                    <div class="nip-title">${nip.title}</div>
-                    <div class="nip-desc">${nip.desc}</div>
-                </div>
-            `;
-        }).join('');
-
-        container.innerHTML = nipElements;
-    }
-
-    async startStatsUpdates() {
-        await this.updateStats();
-        this.statsUpdateInterval = setInterval(() => {
-            this.updateStats();
-        }, 10000); // Update every 10 seconds
     }
 
     async updateStats() {
         try {
+            this.setUpdateIndicator(true);
             const response = await fetch('/api/relay/stats');
-            if (response.ok) {
-                const stats = await response.json();
-                this.renderStats(stats);
-            }
-        } catch (error) {
-            console.error('Failed to update stats:', error);
-        }
-    }
-
-    renderStats(stats) {
-        const elements = {
-            'total-events': stats.total_events || 0,
-            'unique-pubkeys': stats.unique_pubkeys || 0,
-            'websocket-connections': stats.active_connections || 0,
-            'events-24h': stats.events_24h || 0
-        };
-
-        Object.entries(elements).forEach(([id, value]) => {
-            const element = document.getElementById(id);
-            if (element) {
-                this.animateNumber(element, parseInt(value) || 0);
-            }
-        });
-    }
-
-    animateNumber(element, targetValue) {
-        const currentValue = parseInt(element.textContent) || 0;
-        const difference = targetValue - currentValue;
-        const duration = 1000; // 1 second
-        const steps = 60; // 60 FPS
-        const stepValue = difference / steps;
-        let currentStep = 0;
-
-        const timer = setInterval(() => {
-            currentStep++;
-            const newValue = Math.round(currentValue + (stepValue * currentStep));
-            element.textContent = newValue.toLocaleString();
-
-            if (currentStep >= steps) {
-                clearInterval(timer);
-                element.textContent = targetValue.toLocaleString();
-            }
-        }, duration / steps);
-    }
-
-    async startActivityUpdates() {
-        await this.updateActivity();
-        this.activityUpdateInterval = setInterval(() => {
-            this.updateActivity();
-        }, 15000); // Update every 15 seconds
-    }
-
-    async updateActivity() {
-        try {
-            const response = await fetch('/api/relay/activity');
-            if (response.ok) {
-                const activity = await response.json();
-                this.renderActivity(activity.recent || []);
-            }
-        } catch (error) {
-            console.error('Failed to update activity:', error);
-            // Show sample activity if API fails
-            this.renderSampleActivity();
-        }
-    }
-
-    renderActivity(activities) {
-        const activityFeed = document.getElementById('activity-feed');
-        
-        if (activities.length === 0) {
-            activityFeed.innerHTML = '<div class="activity-item"><div class="activity-content">No recent activity</div></div>';
-            return;
-        }
-
-        const activityElements = activities.slice(0, 10).map(activity => {
-            const timeAgo = this.formatTimeAgo(activity.timestamp);
-            const kindName = this.getEventKindName(activity.kind);
+            if (!response.ok) throw new Error('Failed to fetch stats');
             
-            return `
+            const stats = await response.json();
+            
+            this.updateStatElement('active-sessions', stats.active_sessions || 0);
+            this.updateStatElement('total-events', stats.relay_events || stats.new_events || stats.local_content || 0);
+            this.updateStatElement('total-sessions', stats.total_sessions || 0);
+            this.updateStatElement('total-requests', 
+                (stats.total_requests || 0) + (stats.event_commands || 0) + (stats.close_commands || 0));
+            this.updateStatElement('database-operations', 
+                (stats.database_reads || 0) + (stats.database_writes || 0));
+            this.updateStatElement('uptime', 
+                stats.uptime_hours ? `${stats.uptime_hours}h` : '0h');
+            
+            this.updateLastUpdatedTime();
+            
+            // Track activity changes for recent events
+            this.trackActivityChanges(stats);
+            
+        } catch (error) {
+            console.error('Error updating stats:', error);
+            const statElements = ['active-sessions', 'total-events', 'total-sessions', 
+                                'total-requests', 'database-operations', 'uptime'];
+            statElements.forEach(id => this.updateStatElement(id, '?'));
+        } finally {
+            this.setUpdateIndicator(false);
+        }
+    }
+
+    trackActivityChanges(currentStats) {
+        const now = new Date();
+        
+        // Check for new database reads (indicates new requests)
+        if (this.lastStats && currentStats.database_reads > this.lastStats.database_reads) {
+            const newReads = currentStats.database_reads - this.lastStats.database_reads;
+            this.addActivityItem({
+                type: 'query',
+                content: `${newReads} database read${newReads > 1 ? 's' : ''} - Client query processed`,
+                timestamp: now
+            });
+        }
+        
+        // Check for new sessions
+        if (this.lastStats && currentStats.total_sessions > this.lastStats.total_sessions) {
+            const newSessions = currentStats.total_sessions - this.lastStats.total_sessions;
+            this.addActivityItem({
+                type: 'connect',
+                content: `New client connection (Session #${currentStats.total_sessions})`,
+                timestamp: now
+            });
+        }
+        
+        // Check for active session changes
+        if (this.lastStats && currentStats.active_sessions !== this.lastStats.active_sessions) {
+            const change = currentStats.active_sessions - this.lastStats.active_sessions;
+            if (change > 0) {
+                this.addActivityItem({
+                    type: 'connect',
+                    content: `Client connected (${currentStats.active_sessions} active)`,
+                    timestamp: now
+                });
+            } else if (change < 0) {
+                this.addActivityItem({
+                    type: 'disconnect',
+                    content: `Client disconnected (${currentStats.active_sessions} active)`,
+                    timestamp: now
+                });
+            }
+        }
+        
+        // Check for new requests
+        if (this.lastStats && currentStats.total_requests > this.lastStats.total_requests) {
+            const newRequests = currentStats.total_requests - this.lastStats.total_requests;
+            this.addActivityItem({
+                type: 'request',
+                content: `${newRequests} new request${newRequests > 1 ? 's' : ''} processed`,
+                timestamp: now
+            });
+        }
+        
+        // Store current stats for next comparison
+        this.lastStats = { ...currentStats };
+    }
+
+    addActivityItem(item) {
+        this.recentActivity.unshift(item);
+        
+        // Keep only last 10 items
+        if (this.recentActivity.length > 10) {
+            this.recentActivity = this.recentActivity.slice(0, 10);
+        }
+        
+        // Update the display
+        this.displayRecentActivity();
+    }
+
+    displayRecentActivity() {
+        const activityFeed = document.getElementById('activity-feed');
+        const activityStatus = document.getElementById('activity-status');
+        
+        if (!activityFeed) return;
+        
+        if (this.recentActivity.length > 0) {
+            activityFeed.innerHTML = this.recentActivity.map(item => `
                 <div class="activity-item">
-                    <div class="activity-time">${timeAgo}</div>
+                    <div class="activity-time">${this.formatTime(item.timestamp)}</div>
                     <div class="activity-content">
-                        <span class="activity-kind">${kindName}</span> event from 
-                        <span class="activity-pubkey">${this.truncateString(activity.pubkey, 16)}</span>
+                        <span class="activity-type activity-type-${item.type}">${item.type.toUpperCase()}</span>
+                        <span class="activity-text">${item.content}</span>
+                    </div>
+                </div>
+            `).join('');
+            
+            if (activityStatus) {
+                activityStatus.textContent = `${this.recentActivity.length} recent events`;
+            }
+        } else {
+            activityFeed.innerHTML = `
+                <div class="activity-item">
+                    <div class="activity-content">
+                        <span class="activity-text">Waiting for relay activity...</span>
                     </div>
                 </div>
             `;
-        }).join('');
-
-        activityFeed.innerHTML = activityElements;
+            
+            if (activityStatus) {
+                activityStatus.textContent = 'No recent activity';
+            }
+        }
     }
 
-    renderSampleActivity() {
-        const activityFeed = document.getElementById('activity-feed');
-        const sampleActivities = [
-            { kind: 1, pubkey: '8dc8688200b447ec2e4018ea5e42dc5d480940cb3f19ca8f361d28179dc4ba5e', timestamp: Date.now() - 30000 },
-            { kind: 0, pubkey: 'abc123def456789012345678901234567890123456789012345678901234567890', timestamp: Date.now() - 120000 },
-            { kind: 1, pubkey: 'def456abc123789012345678901234567890123456789012345678901234567890', timestamp: Date.now() - 300000 }
-        ];
-
-        this.renderActivity(sampleActivities);
+    updateStatElement(elementId, value) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            const oldValue = element.textContent;
+            element.textContent = value;
+            
+            if (oldValue !== value.toString() && oldValue !== '-') {
+                element.classList.add('stat-pulse');
+                setTimeout(() => element.classList.remove('stat-pulse'), 500);
+            }
+        }
     }
 
-    formatTimeAgo(timestamp) {
-        const now = Date.now();
-        const diff = now - timestamp;
+    async updateActivity() {
+        // Just refresh our tracked activity display
+        this.displayRecentActivity();
+    }
+
+    formatTime(timestamp) {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
         const seconds = Math.floor(diff / 1000);
         const minutes = Math.floor(seconds / 60);
         const hours = Math.floor(minutes / 60);
-        const days = Math.floor(hours / 24);
-
-        if (days > 0) return `${days}d ago`;
+        
         if (hours > 0) return `${hours}h ago`;
         if (minutes > 0) return `${minutes}m ago`;
-        return `${seconds}s ago`;
+        if (seconds > 10) return `${seconds}s ago`;
+        return 'Just now';
     }
 
-    getEventKindName(kind) {
-        const kindNames = {
-            0: 'Profile',
-            1: 'Text Note',
-            2: 'Relay Rec',
-            3: 'Contacts',
-            4: 'DM',
-            5: 'Deletion',
-            7: 'Reaction',
-            40: 'Channel Create',
-            41: 'Channel Meta',
-            42: 'Channel Message'
-        };
-        return kindNames[kind] || `Kind ${kind}`;
+    startStatsUpdates() {
+        this.updateStats();
+        
+        this.statsUpdateInterval = setInterval(() => {
+            if (!this.isUpdating) {
+                this.updateStats();
+            }
+        }, 10000);
     }
 
-    truncateString(str, length) {
-        if (str.length <= length) return str;
-        return str.substring(0, length) + '...';
+    startActivityUpdates() {
+        this.updateActivity();
+        
+        this.activityUpdateInterval = setInterval(() => {
+            if (!this.isUpdating) {
+                this.updateActivity();
+            }
+        }, 5000); // More frequent updates for activity
     }
 
     destroy() {
@@ -290,21 +347,225 @@ class RelayDashboard {
         if (this.activityUpdateInterval) {
             clearInterval(this.activityUpdateInterval);
         }
-        if (this.wsConnection) {
-            this.wsConnection.close();
-        }
     }
 }
 
-// Initialize the dashboard when the page loads
-let relayDashboard;
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    const text = element.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        const button = element.nextElementSibling;
+        if (button) {
+            const originalText = button.textContent;
+            button.textContent = '✓';
+            button.style.color = '#10b981';
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.color = '';
+            }, 2000);
+        }
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+    });
+}
+
+let dashboard = null;
 document.addEventListener('DOMContentLoaded', () => {
-    relayDashboard = new RelayDashboard();
+    dashboard = new RelayDashboard();
+    
+    window.addEventListener('beforeunload', () => {
+        if (dashboard) {
+            dashboard.destroy();
+        }
+    });
 });
 
-// Cleanup when leaving the page
-window.addEventListener('beforeunload', () => {
-    if (relayDashboard) {
-        relayDashboard.destroy();
+// Enhanced CSS with centered headers and activity styling
+const style = document.createElement('style');
+style.textContent = `
+    .stat-pulse {
+        animation: stat-pulse-anim 0.5s ease-in-out;
     }
-});
+    
+    @keyframes stat-pulse-anim {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    
+    @keyframes pulse-indicator {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    /* CENTERED HEADERS */
+    .stats-header-centered {
+        text-align: center;
+        margin: 2rem 0 1.5rem 0;
+    }
+    
+    .stats-header-centered h2 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.8rem;
+    }
+    
+    .stats-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+        justify-content: center;
+    }
+    
+    .activity-header-centered {
+        text-align: center;
+        margin: 2rem 0 1.5rem 0;
+    }
+    
+    .activity-header-centered h2 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.8rem;
+    }
+    
+    .activity-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+        justify-content: center;
+    }
+    
+    .refresh-controls {
+        text-align: center;
+        margin: 1rem 0;
+        font-size: 0.875rem;
+    }
+    
+    .refresh-controls > * {
+        margin: 0 0.5rem;
+        vertical-align: middle;
+    }
+    
+    .refresh-btn {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s;
+        margin-left: 1rem;
+    }
+    
+    .refresh-btn:hover:not(:disabled) {
+        background: #1d4ed8;
+    }
+    
+    .refresh-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .last-updated {
+        color: #6b7280;
+        font-size: 0.875rem;
+    }
+    
+    .update-indicator {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+    
+    /* ACTIVITY STYLING */
+    .activity-item {
+        padding: 0.75rem;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+    
+    .activity-item:last-child {
+        border-bottom: none;
+    }
+    
+    .activity-time {
+        font-size: 0.75rem;
+        color: #6b7280;
+        min-width: 60px;
+        flex-shrink: 0;
+    }
+    
+    .activity-content {
+        flex: 1;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    
+    .activity-type {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        padding: 0.2rem 0.5rem;
+        border-radius: 3px;
+        flex-shrink: 0;
+    }
+    
+    .activity-type-connect { background: #dcfce7; color: #166534; }
+    .activity-type-disconnect { background: #fee2e2; color: #dc2626; }
+    .activity-type-query { background: #dbeafe; color: #1e40af; }
+    .activity-type-request { background: #fef3c7; color: #92400e; }
+    
+    .activity-text {
+        font-size: 0.875rem;
+        color: #374151;
+        flex: 1;
+    }
+    
+    /* NIP badges */
+    .nips-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 1rem 0;
+    }
+    
+    .nip-badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .nip-badge.basic { background: #dbeafe; color: #1e40af; }
+    .nip-badge.auth { background: #fef3c7; color: #92400e; }
+    .nip-badge.advanced { background: #e5e7eb; color: #374151; }
+    .nip-badge.social { background: #fce7f3; color: #be185d; }
+    
+    /* Dark theme */
+    [data-theme="dark"] .stats-info,
+    [data-theme="dark"] .activity-info { color: #9ca3af; }
+    [data-theme="dark"] .last-updated { color: #9ca3af; }
+    [data-theme="dark"] .activity-item { border-color: #374151; }
+    [data-theme="dark"] .activity-time { color: #9ca3af; }
+    [data-theme="dark"] .activity-text { color: #d1d5db; }
+    [data-theme="dark"] .activity-type-connect { background: #166534; color: #dcfce7; }
+    [data-theme="dark"] .activity-type-disconnect { background: #dc2626; color: #fee2e2; }
+    [data-theme="dark"] .activity-type-query { background: #1e40af; color: #dbeafe; }
+    [data-theme="dark"] .activity-type-request { background: #92400e; color: #fef3c7; }
+    [data-theme="dark"] .nip-badge.basic { background: #1e40af; color: #dbeafe; }
+    [data-theme="dark"] .nip-badge.auth { background: #92400e; color: #fef3c7; }
+    [data-theme="dark"] .nip-badge.advanced { background: #374151; color: #e5e7eb; }
+    [data-theme="dark"] .nip-badge.social { background: #be185d; color: #fce7f3; }
+`;
+document.head.appendChild(style);
