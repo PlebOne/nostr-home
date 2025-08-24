@@ -460,32 +460,3 @@ def not_found(error):
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=3000)
 
-# Simple working scheduler
-import threading
-import time
-
-def simple_scheduler():
-    """Simple background scheduler that updates content every 30 minutes"""
-    def scheduler_loop():
-        print("[Scheduler] Starting content update scheduler...")
-        time.sleep(60)  # Wait 1 minute after startup
-        
-        while True:
-            try:
-                print("[Scheduler] Running scheduled content update...")
-                result = nostr_client.update_cache()
-                print(f"[Scheduler] Update completed: {result}")
-            except Exception as e:
-                print(f"[Scheduler] Error during update: {e}")
-            
-            # Wait 30 minutes (1800 seconds)
-            time.sleep(1800)
-    
-    # Start scheduler in background thread
-    thread = threading.Thread(target=scheduler_loop, daemon=True)
-    thread.start()
-    print("[Scheduler] Background scheduler initialized")
-
-# Start scheduler automatically
-simple_scheduler()
-
