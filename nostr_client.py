@@ -140,7 +140,7 @@ class NostrContentClient:
         
         print(f"🚀 Fetching from {len(self.relays)} relays concurrently...")
         
-        def fetch_with_timeout(relay_url, timeout=10):
+        def fetch_with_timeout(relay_url, timeout=15):
             try:
                 print(f"🔍 Connecting to: {relay_url}")
                 events = self._fetch_from_single_relay_timeout(relay_url, pubkey, since, timeout)
@@ -215,11 +215,11 @@ class NostrContentClient:
             )
             
             # Run WebSocket in a separate thread
-            ws_thread = threading.Thread(target=ws.run_forever, kwargs={'ping_interval': 30, 'ping_timeout': 10})
+            ws_thread = threading.Thread(target=ws.run_forever, kwargs={'ping_interval': 20, 'ping_timeout': 5})
             ws_thread.daemon = True
             ws_thread.start()
             
-            # Wait for completion or timeout
+            # Wait for completion or timeout (increased from 10 to 15 seconds)
             if connection_complete.wait(timeout):
                 # Return all collected events
                 events = event_queue
@@ -248,19 +248,21 @@ class NostrContentClient:
             is_first = self.is_first_run()
             
             if is_first:
-                # FIRST RUN: Deep historical fetch
-                # Try to get up to 90 days of history
-                since = int(time.time()) - (90 * 24 * 60 * 60)  # 90 days ago
-                print(f"🎉 First run! Fetching all content from the last 90 days...")
-                print(f"📅 Fetching events since: {time.strftime('%Y-%m-%d', time.localtime(since))}")
+                # FIRST RUN: Full historical fetch (no time limit)
+                since = None  # Fetch ALL historical events
+                print(f"🎉 First run! Fetching ALL historical content (no time limit)...")
+                print(f"📅 This may take a while as we're fetching complete history...")
             else:
                 # SUBSEQUENT RUNS: Only get recent updates
                 last_event = self.db.get_last_event_timestamp()
                 if last_event:
-                    # Add a small buffer (5 minutes) to avoid missing events
-                    since = last_event - 300  
+                    # Add a larger buffer (2 hours) to avoid missing events due to timing issues
+                    # This accounts for relay propagation delays and timezone differences
+                    buffer_time = 2 * 60 * 60  # 2 hours
+                    since = last_event - buffer_time
                     print(f"🔄 Update run: Fetching new events since last update")
                     print(f"📅 Last event: {time.strftime('%Y-%m-%d %H:%M', time.localtime(last_event))}")
+                    print(f"🕐 Using {buffer_time//3600}h buffer - fetching since: {time.strftime('%Y-%m-%d %H:%M', time.localtime(since))}")
                 else:
                     # Fallback to 7 days if no timestamp found
                     since = int(time.time()) - (7 * 24 * 60 * 60)
@@ -301,6 +303,71 @@ class NostrContentClient:
         """Fetch all events (no time limit) for testing"""
         print("Fetching ALL events (no time limit)...")
         return self.fetch_events_simple(pubkey, since=None)
+    
+    def force_full_historical_fetch(self) -> Dict[str, int]:
+        """Force a complete historical fetch of all events (ignoring existing data)"""
+        try:
+            print("🔄 FORCING FULL HISTORICAL FETCH...")
+            print("⚠️  This will fetch ALL historical events regardless of what's already cached")
+            
+            pubkey = self.npub_to_hex(self.npub)
+            if not pubkey:
+                raise ValueError("Invalid npub provided")
+            
+            print(f"Using pubkey: {pubkey}")
+            print(f"🚀 Fetching ALL historical events (no time restrictions)...")
+            
+            # Use reliable relays and fetch sequentially for better reliability
+            reliable_relays = ['wss://relay.nostr.band', 'wss://relay.primal.net', 'wss://nos.lol']
+            print(f"📡 Using {len(reliable_relays)} reliable relays with sequential fetch for maximum reliability")
+            
+            all_events = []
+            unique_events = {}
+            
+            for relay in reliable_relays:
+                try:
+                    print(f"🔍 Fetching from: {relay}")
+                    events = self._fetch_from_single_relay_timeout(relay, pubkey, since=None, timeout=25)
+                    print(f"✅ Found {len(events)} events from {relay}")
+                    
+                    # Add unique events
+                    for event in events:
+                        event_id = event.get('id')
+                        if event_id and event_id not in unique_events:
+                            unique_events[event_id] = event
+                    
+                    # Small delay between relays to be respectful
+                    time.sleep(1)
+                    
+                except Exception as e:
+                    print(f"❌ Error with {relay}: {e}")
+                    continue
+            
+            all_events = list(unique_events.values())
+            print(f"📊 Total unique events collected: {len(all_events)}")
+            
+            if all_events:
+                # Sort by timestamp to see range
+                sorted_events = sorted(all_events, key=lambda x: x.get('created_at', 0))
+                oldest = sorted_events[0].get('created_at', 0)
+                newest = sorted_events[-1].get('created_at', 0)
+                print(f"📅 Full date range: {time.strftime('%Y-%m-%d', time.localtime(oldest))} to {time.strftime('%Y-%m-%d', time.localtime(newest))}")
+                
+                # Show some stats about what we found
+                print(f"🗓️  Oldest event: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(oldest))}")
+                print(f"🗓️  Newest event: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(newest))}")
+                print(f"📈 Events span {(newest - oldest) / (24 * 60 * 60):.1f} days")
+            
+            # Process all events
+            processed = self.process_events(all_events)
+            print(f"✅ Processed: {processed['posts']} posts, {processed['quips']} quips, {processed['images']} images")
+            print(f"🎉 Full historical fetch completed!")
+            
+            return processed
+            
+        except Exception as e:
+            print(f"❌ Error during full historical fetch: {e}")
+            raise e
     
     def process_events(self, events: List[Dict]) -> Dict[str, int]:
         """Process and store events in the database"""

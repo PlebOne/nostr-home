@@ -1,0 +1,32 @@
+[network]
+host = "0.0.0.0"
+port = 8080
+
+[database]
+engine = "rocksdb"
+path = "/data/rnostr.db"
+
+[relay]
+name = "Enhanced Personal Nostr Hub"
+description = "Personal Nostr relay powered by rnostr"
+contact = "admin@localhost"
+pubkey = "8dc8688200b447ec2e4018ea5e42dc5d480940cb3f19ca8f361d28179dc4ba5e"
+supported_nips = [1, 2, 4, 9, 11, 12, 15, 16, 20, 22, 28, 33, 40]
+
+[limitation]
+max_message_length = 65536
+max_subscriptions = 20
+max_filters = 10
+max_limit = 5000
+max_subid_length = 256
+min_pow_difficulty = 0
+auth_required = false
+payment_required = false
+
+[authorization]
+# Allow all for now - can be restricted later
+pubkey_whitelist = []
+kind_whitelist = []
+
+[logging]
+level = "info"

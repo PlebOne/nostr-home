@@ -164,6 +164,51 @@ def update_cache():
             'message': str(e)
         }), 500
 
+@app.route('/api/fetch-full-history', methods=['POST'])
+def fetch_full_history():
+    try:
+        print('🔄 Full historical fetch requested via API')
+        # Use a longer timeout for historical fetch
+        result = nostr_client.force_full_historical_fetch()
+        return jsonify({
+            'success': True,
+            'message': 'Full historical fetch completed successfully',
+            'processed': result,
+            'note': 'This fetches ALL historical events and may take several minutes'
+        })
+    except Exception as e:
+        print(f"❌ Error during full historical fetch: {e}")
+        return jsonify({
+            'error': 'Failed to fetch full history',
+            'message': str(e),
+            'note': 'Try the manual method if API timeouts occur'
+        }), 500
+
+@app.route('/api/test-historical-fetch', methods=['POST'])
+def test_historical_fetch():
+    """Test endpoint to verify historical fetch capability"""
+    try:
+        print('🧪 Testing historical fetch capability...')
+        
+        # Quick test to see if we can connect to relays
+        pubkey = nostr_client.npub_to_hex(nostr_client.npub)
+        test_events = nostr_client._fetch_from_single_relay_timeout(
+            'wss://relay.nostr.band', pubkey, since=None, timeout=10
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': f'Historical fetch test successful - found {len(test_events)} events',
+            'relay_tested': 'wss://relay.nostr.band',
+            'note': 'Use /api/fetch-full-history for complete historical fetch'
+        })
+    except Exception as e:
+        print(f"❌ Historical fetch test failed: {e}")
+        return jsonify({
+            'error': 'Historical fetch test failed',
+            'message': str(e)
+        }), 500
+
 # Relay API routes - Proxy to Go relay
 @app.route('/api/relay/info')
 def relay_info():

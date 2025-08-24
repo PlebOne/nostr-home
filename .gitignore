@@ -57,6 +57,7 @@ logs/
 .cache/
 *.db
 *.sqlite
+
 # Cache files
 cache/
 .DS_Store?
@@ -65,3 +66,19 @@ cache/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Backup files and development artifacts
+*.backup
+*.backup.*
+*.before_fix
+*.original
+*.fixed
+*.bak
+*.old
+
+# Relay data directories
+relay-data/
+rnostr-data/
+
+# SSL certificates (if generated locally)
+ssl/
